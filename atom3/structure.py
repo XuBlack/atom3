@@ -14,9 +14,20 @@ import pandas as pd
 
 import atom3.database as db
 
+from Bio.PDB.DSSP import dssp_dict_from_pdb_file
+
 # Max number of residues allowed.  Prevents processing of massive PDB
 # structures.
 max_residues = 100000
+
+
+def get_ss_and_asa_values_with_dssp(pdb_file_name):
+    dssp_tuple = dssp_dict_from_pdb_file(pdb_file_name)
+    dssp_dict = dssp_tuple[0]
+    ss_and_asa_values = [value[2:4] for value in dssp_dict.values()]
+    ss_values = [ss_and_asa_value[0] for ss_and_asa_value in ss_and_asa_values]
+    asa_values = [ss_and_asa_value[1] for ss_and_asa_value in ss_and_asa_values]
+    return ss_values, asa_values
 
 
 def extract_c_alpha_regions(structure, radius_ang, detailed=False):
@@ -81,12 +92,17 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
             new_structure = Bio.PDB.Structure.Structure(biopy_structure.id)
             new_structure.add(biopy_structure[0])
             biopy_structure = new_structure
+
+        # Extract secondary structure (SS) and accessible surface area (ASA) values for each PDB file using DSSP
+        ss_values, asa_values = get_ss_and_asa_values_with_dssp(structure_filename)
+
         atoms = []
         for residue in Bio.PDB.Selection.unfold_entities(biopy_structure, 'R'):
             # Prune out things that aren't actually residue atoms.
             if 'CA' in residue and residue.get_id()[0] == ' ':
                 for atom in residue:
-                    atoms.append(atom)
+                    if 'CA' in atom.get_id():  # Select for only carbon-alpha (CA) atoms
+                        atoms.append(atom)
 
         df = pd.DataFrame([(
             pdb_name,
@@ -95,6 +111,8 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
             str(atom.get_parent().get_id()[1]) +
             atom.get_parent().get_id()[2],
             atom.get_parent().get_resname(),
+            ss_values,
+            asa_values,
             atom.get_coord()[0],
             atom.get_coord()[1],
             atom.get_coord()[2],
@@ -107,6 +125,8 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
                 'chain',
                 'residue',
                 'resname',
+                'ss_values',
+                'asa_values',
                 'x',
                 'y',
                 'z',
@@ -179,6 +199,7 @@ def create_lookup(ca):
             lookup[(pdb_name, model, chain, residue)] = res[0]
 
         return lookup[(pdb_name, model, chain, residue)]
+
     return lookup_aa_id
 
 
@@ -215,7 +236,7 @@ def add_sidechains_parser(subparsers, pp):
     ap = subparsers.add_parser(
         'sidechains', description="find missing side chains",
         help='generates a sequence for use with scwrl4 where missing side'
-        ' residues are upper-cased',
+             ' residues are upper-cased',
         parents=[pp])
     ap.set_defaults(func=get_missing_sidechains_main)
     ap.add_argument('pdb_dataset', type=str,
@@ -248,8 +269,8 @@ def get_missing_sidechains(pdb_dataset, output_scwrl):
                         logging.debug(
                             "Missing residue {:} at position {:} (with id {:})"
                             " which has {:} instead of the expected {:} atoms."
-                            .format(res_name, i, res_id, curr_count,
-                                    expected[res_name]))
+                                .format(res_name, i, res_id, curr_count,
+                                        expected[res_name]))
                         missing += 1
                         scwrl_list.append(res_code.upper())
                     else:
