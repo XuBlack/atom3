@@ -56,7 +56,7 @@ def parse_biopython_structure(pdb_filename):
     _, ext = os.path.splitext(pdb_filename)
 
     if ext == ".gz":
-        biopy_structure = parser.get_structure('pdb', gzip.open(pdb_filename,'rt'))
+        biopy_structure = parser.get_structure('pdb', gzip.open(pdb_filename, 'rt'))
     elif ".pdb" in ext:
         biopy_structure = parser.get_structure('pdb', pdb_filename)
     else:
@@ -162,13 +162,13 @@ def _check_filenames(pdb_name, pdb_filenames, enforcement='one'):
     if enforcement == 'one' and len(pdb_filenames) != 1:
         logging.error(
             "Need exactly one file per key, instead for {:} got {:} ({:})"
-            .format(pdb_name, len(pdb_filenames), pdb_filenames))
+                .format(pdb_name, len(pdb_filenames), pdb_filenames))
         raise RuntimeError
     elif enforcement == 'at_least_one' and len(pdb_filenames) < 1:
         logging.error(
             "Need at least one file per key, instead for {:} got {:} "
             "({:})"
-            .format(pdb_name, len(pdb_filenames), pdb_filenames))
+                .format(pdb_name, len(pdb_filenames), pdb_filenames))
         raise RuntimeError
     elif enforcement == 'none':
         pass
@@ -275,12 +275,12 @@ def _get_pdb_dir_filenames(pdb_dir, recurse=True, extension=None):
 
     if extension is None:
         pdb_filenames += glob.glob(pdb_dir + '/*.pdb*.gz') + \
-            glob.glob(pdb_dir + '/*.pdb[0-9]') + \
-            glob.glob(pdb_dir + '/*.pdb')
+                         glob.glob(pdb_dir + '/*.pdb[0-9]') + \
+                         glob.glob(pdb_dir + '/*.pdb')
     else:
         pdb_filenames += glob.glob(pdb_dir + '/*' + extension)
 
-    pdb_filenames = [x for x in pdb_filenames if os.path.isfile(x)]
+    pdb_filenames = [x for x in pdb_filenames if os.path.isfile(x) and '.gz' in x]
 
     return pdb_filenames
 

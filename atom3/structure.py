@@ -22,11 +22,15 @@ max_residues = 100000
 
 
 def get_ss_and_asa_values_with_dssp(pdb_file_name):
-    dssp_tuple = dssp_dict_from_pdb_file(pdb_file_name)
-    dssp_dict = dssp_tuple[0]
-    ss_and_asa_values = [value[2:4] for value in dssp_dict.values()]
-    ss_values = [ss_and_asa_value[0] for ss_and_asa_value in ss_and_asa_values]
-    asa_values = [ss_and_asa_value[1] for ss_and_asa_value in ss_and_asa_values]
+    ss_values, asa_values = [], []
+    try:
+        dssp_tuple = dssp_dict_from_pdb_file(pdb_file_name)
+        dssp_dict = dssp_tuple[0]
+        ss_and_asa_values = [value[2:4] for value in dssp_dict.values()]
+        ss_values = [ss_and_asa_value[0] for ss_and_asa_value in ss_and_asa_values]
+        asa_values = [ss_and_asa_value[1] for ss_and_asa_value in ss_and_asa_values]
+    except Exception:
+        logging.info("No DSSP features found for {:}".format(pdb_file_name))
     return ss_values, asa_values
 
 
@@ -94,7 +98,7 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
             biopy_structure = new_structure
 
         # Extract secondary structure (SS) and accessible surface area (ASA) values for each PDB file using DSSP
-        ss_values, asa_values = get_ss_and_asa_values_with_dssp(structure_filename)
+        ss_values, asa_values = get_ss_and_asa_values_with_dssp(_)  # Extract PDB filename from GZ archive filename
 
         atoms = []
         for residue in Bio.PDB.Selection.unfold_entities(biopy_structure, 'R'):
