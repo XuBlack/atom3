@@ -20,21 +20,78 @@ from Bio.PDB.DSSP import dssp_dict_from_pdb_file
 # structures.
 max_residues = 100000
 
+expected = {
+    "TRP": 14,
+    "PHE": 11,
+    "LYS": 9,
+    "PRO": 7,
+    "ASP": 8,
+    "ALA": 5,
+    "ARG": 11,
+    "CYS": 6,
+    "VAL": 7,
+    "THR": 7,
+    "GLY": 4,
+    "SER": 6,
+    "HIS": 10,
+    "LEU": 8,
+    "GLU": 9,
+    "TYR": 12,
+    "ILE": 8,
+    "ASN": 8,
+    "MET": 8,
+    "GLN": 9,
+}
 
-def get_ss_and_asa_values_with_dssp(pdb_file_name):
-    ss_values, asa_values = [], []
+normalization_constants = {
+    "TRP": 285.0,
+    "PHE": 240.0,
+    "LYS": 236.0,
+    "PRO": 159.0,
+    "ASP": 193.0,
+    "ALA": 129.0,
+    "ARG": 274.0,
+    "CYS": 167.0,
+    "VAL": 174.0,
+    "THR": 172.0,
+    "GLY": 104.0,
+    "SER": 155.0,
+    "HIS": 224.0,
+    "LEU": 201.0,
+    "GLU": 223.0,
+    "TYR": 263.0,
+    "ILE": 197.0,
+    "ASN": 195.0,
+    "MET": 224.0,
+    "GLN": 225.0,
+}
+
+
+def normalize_asa_value_to_rsa_value(asa_value, res_code):
+    normalization_factor = normalization_constants[res_code]
+    rsa_value = asa_value / normalization_factor
+    return rsa_value
+
+
+def get_dssp_dict_for_pdb_file(pdb_file_name):
+    dssp_dict = {}
     try:
-        # Retrieve SS and ASA feature values
         dssp_tuple = dssp_dict_from_pdb_file(pdb_file_name)
         dssp_dict = dssp_tuple[0]
-        ss_and_asa_values = [value[2:4] for value in dssp_dict.values()]
-        ss_values = [ss_and_asa_value[0] for ss_and_asa_value in ss_and_asa_values]
-        asa_values = [ss_and_asa_value[1] for ss_and_asa_value in ss_and_asa_values]
-        # Normalize ASA feature values
-        asa_values = [asa_value / max(asa_values) for asa_value in asa_values]
     except Exception:
         logging.info("No DSSP features found for {:}".format(pdb_file_name))
-    return ss_values, asa_values
+    return dssp_dict
+
+
+def get_dssp_value_for_residue(dssp_dict, feature, chain, residue, res_code):
+    dssp_value = None
+    if feature is 'SS':
+        dssp_values = dssp_dict[(chain, residue)]
+        dssp_value = dssp_values[1]
+    elif feature is 'RSA':
+        dssp_values = dssp_dict[(chain, residue)]
+        dssp_value = normalize_asa_value_to_rsa_value(dssp_values[2], res_code)
+    return dssp_value
 
 
 def extract_c_alpha_regions(structure, radius_ang, detailed=False):
@@ -101,7 +158,7 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
             biopy_structure = new_structure
 
         # Extract secondary structure (SS) and accessible surface area (ASA) values for each PDB file using DSSP
-        ss_values, asa_values = get_ss_and_asa_values_with_dssp(_)  # Extract PDB filename from GZ archive filename
+        dssp_dict = get_dssp_dict_for_pdb_file(_)  # Extract PDB filename from GZ archive filename
 
         atoms = []
         for residue in Bio.PDB.Selection.unfold_entities(biopy_structure, 'R'):
@@ -115,11 +172,16 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
             pdb_name,
             str(atom.get_parent().get_parent().get_parent().serial_num),
             atom.get_parent().get_full_id()[2],
-            str(atom.get_parent().get_id()[1]) +
-            atom.get_parent().get_id()[2],
+            str(atom.get_parent().get_id()[1]) + atom.get_parent().get_id()[2],
             atom.get_parent().get_resname(),
-            ss_values,
-            asa_values,
+            get_dssp_value_for_residue(dssp_dict, 'SS',
+                                       atom.get_parent().get_full_id()[2],
+                                       atom.get_parent().get_id(),
+                                       atom.get_parent().get_resname()),
+            get_dssp_value_for_residue(dssp_dict, 'RSA',
+                                       atom.get_parent().get_full_id()[2],
+                                       atom.get_parent().get_id(),
+                                       atom.get_parent().get_resname()),
             atom.get_coord()[0],
             atom.get_coord()[1],
             atom.get_coord()[2],
@@ -132,8 +194,8 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
                 'chain',
                 'residue',
                 'resname',
-                'ss_values',
-                'asa_values',
+                'ss_value',
+                'rsa_value',
                 'x',
                 'y',
                 'z',
@@ -208,30 +270,6 @@ def create_lookup(ca):
         return lookup[(pdb_name, model, chain, residue)]
 
     return lookup_aa_id
-
-
-expected = {
-    "TRP": 14,
-    "PHE": 11,
-    "LYS": 9,
-    "PRO": 7,
-    "ASP": 8,
-    "ALA": 5,
-    "ARG": 11,
-    "CYS": 6,
-    "VAL": 7,
-    "THR": 7,
-    "GLY": 4,
-    "SER": 6,
-    "HIS": 10,
-    "LEU": 8,
-    "GLU": 9,
-    "TYR": 12,
-    "ILE": 8,
-    "ASN": 8,
-    "MET": 8,
-    "GLN": 9,
-}
 
 
 def add_sidechains_parser(subparsers, pp):
