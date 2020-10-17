@@ -68,22 +68,34 @@ normalization_constants = {
 
 
 def normalize_asa_value_to_rsa_value(asa_value, res_code):
+    """
+    Normalize an accessible surface area (ASA) value into a
+    corresponding relative solvent accessibility (RSA) value
+    by dividing the original ASA value by a theoretically-determined
+    constant for the type of residue to which the ASA value corresponds.
+    """
     normalization_factor = normalization_constants[res_code]
     rsa_value = asa_value / normalization_factor
     return rsa_value
 
 
-def get_dssp_dict_for_pdb_file(pdb_file_name):
+def get_dssp_dict_for_pdb_file(pdb_filename):
+    """Run DSSP to calculate secondary structure features for a given PDB file."""
     dssp_dict = {}
     try:
-        dssp_tuple = dssp_dict_from_pdb_file(pdb_file_name)
+        dssp_tuple = dssp_dict_from_pdb_file(pdb_filename)
         dssp_dict = dssp_tuple[0]
     except Exception:
-        logging.info("No DSSP features found for {:}".format(pdb_file_name))
+        logging.info("No DSSP features found for {:}: Skipping...".format(pdb_filename))
     return dssp_dict
 
 
 def get_dssp_value_for_residue(dssp_dict, feature, chain, residue, res_code):
+    """
+    Return a secondary structure (SS) value or a
+    relative solvent accessibility (RSA) value for
+    a given chain-residue pair.
+    """
     dssp_value = None
     if feature is 'SS':
         dssp_values = dssp_dict[(chain, residue)]

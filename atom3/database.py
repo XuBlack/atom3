@@ -5,9 +5,12 @@ import logging
 import glob
 import gzip
 import os.path
+import re
 
 import Bio.PDB
 import numpy as np
+
+from Bio.PDB.DSSP import dssp_dict_from_pdb_file
 
 
 def identity(x):
@@ -252,6 +255,24 @@ def _is_pdb_snapshot(pdb_snapshot, extension=None):
         pdb_snapshot, extension=extension)) != 0
 
 
+def _is_pdb_file_with_dssp_features(pdb_filename):
+    """Check if provided PDB file has DSSP-calculable features."""
+    _, ext = os.path.splitext(pdb_filename)
+    if re.match(".pdb[0-9]$", ext) or ext == ".gz":
+        try:
+            if ext == ".gz":
+                extracted_pdb_filename = pdb_filename[:-3]
+                dssp_dict_from_pdb_file(extracted_pdb_filename)
+            else:
+                dssp_dict_from_pdb_file(pdb_filename)
+            return True
+        except Exception:
+            logging.info("No DSSP features found for {:}: Skipping...".format(pdb_filename))
+            return False
+    else:
+        return True
+
+
 def _get_pdb_list_from_file(pdb_file_list, extension=None):
     """Get pdb files from a text file containing one pdb file per line."""
     with open(pdb_file_list, 'r') as f:
@@ -274,13 +295,15 @@ def _get_pdb_dir_filenames(pdb_dir, recurse=True, extension=None):
                                                         extension=extension)
 
     if extension is None:
-        pdb_filenames += glob.glob(pdb_dir + '/*.pdb*.gz') + \
-                         glob.glob(pdb_dir + '/*.pdb[0-9]') + \
-                         glob.glob(pdb_dir + '/*.pdb')
+        newly_discovered_pdb_filenames = glob.glob(pdb_dir + '/*.pdb*.gz') + \
+                                         glob.glob(pdb_dir + '/*.pdb[0-9]') + \
+                                         glob.glob(pdb_dir + '/*.pdb')
+        pdb_filenames += newly_discovered_pdb_filenames
     else:
-        pdb_filenames += glob.glob(pdb_dir + '/*' + extension)
+        newly_discovered_pdb_filenames = glob.glob(pdb_dir + '/*' + extension)
+        pdb_filenames += newly_discovered_pdb_filenames
 
-    pdb_filenames = [x for x in pdb_filenames if os.path.isfile(x) and '.gz' in x]
+    pdb_filenames = [x for x in pdb_filenames if os.path.isfile(x) and _is_pdb_file_with_dssp_features(x)]
 
     return pdb_filenames
 
