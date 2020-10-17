@@ -267,7 +267,7 @@ def _is_pdb_file_with_dssp_features(pdb_filename):
                 dssp_dict_from_pdb_file(pdb_filename)
             return True
         except Exception:
-            logging.info("No DSSP features found for {:}: Skipping...".format(pdb_filename))
+            logging.info("No DSSP features found for {:}".format(pdb_filename))
             return False
     else:
         return True
@@ -303,7 +303,7 @@ def _get_pdb_dir_filenames(pdb_dir, recurse=True, extension=None):
         newly_discovered_pdb_filenames = glob.glob(pdb_dir + '/*' + extension)
         pdb_filenames += newly_discovered_pdb_filenames
 
-    pdb_filenames = [x for x in pdb_filenames if os.path.isfile(x) and _is_pdb_file_with_dssp_features(x)]
+    pdb_filenames = [x for x in pdb_filenames if os.path.isfile(x)]
 
     return pdb_filenames
 
