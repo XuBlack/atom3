@@ -74,8 +74,12 @@ def normalize_asa_value_to_rsa_value(asa_value, res_code):
     by dividing the original ASA value by a theoretically-determined
     constant for the type of residue to which the ASA value corresponds.
     """
-    normalization_factor = normalization_constants[res_code]
-    rsa_value = asa_value / normalization_factor
+    rsa_value = None
+    try:
+        normalization_factor = normalization_constants[res_code]
+        rsa_value = asa_value / normalization_factor
+    except Exception:
+        logging.info("Invalid ASA value of {:}: Skipping...".format(asa_value))
     return rsa_value
 
 
@@ -97,12 +101,15 @@ def get_dssp_value_for_residue(dssp_dict, feature, chain, residue, res_code):
     a given chain-residue pair.
     """
     dssp_value = None
-    if feature is 'SS':
-        dssp_values = dssp_dict[(chain, residue)]
-        dssp_value = dssp_values[1]
-    elif feature is 'RSA':
-        dssp_values = dssp_dict[(chain, residue)]
-        dssp_value = normalize_asa_value_to_rsa_value(dssp_values[2], res_code)
+    try:
+        if feature is 'SS':
+            dssp_values = dssp_dict[(chain, residue)]
+            dssp_value = dssp_values[1]
+        elif feature is 'RSA':
+            dssp_values = dssp_dict[(chain, residue)]
+            dssp_value = normalize_asa_value_to_rsa_value(dssp_values[2], res_code)
+    except Exception:
+        logging.info("No DSSP entry found for {:}: Skipping...".format((chain, residue)))
     return dssp_value
 
 
@@ -178,7 +185,16 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
             if 'CA' in residue and residue.get_id()[0] == ' ':
                 for atom in residue:
                     if 'CA' in atom.get_id():  # Select for only carbon-alpha (CA) atoms
-                        atoms.append(atom)
+                        ss_value = get_dssp_value_for_residue(dssp_dict, 'SS',
+                                                              atom.get_parent().get_full_id()[2],
+                                                              atom.get_parent().get_id(),
+                                                              atom.get_parent().get_resname())
+                        rsa_value = get_dssp_value_for_residue(dssp_dict, 'RSA',
+                                                               atom.get_parent().get_full_id()[2],
+                                                               atom.get_parent().get_id(),
+                                                               atom.get_parent().get_resname())
+                        if ss_value is not None and rsa_value is not None:
+                            atoms.append(atom)
 
         df = pd.DataFrame([(
             pdb_name,
