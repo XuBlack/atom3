@@ -11,10 +11,9 @@ import Bio.PDB
 import Bio.PDB.Polypeptide as poly
 import numpy as np
 import pandas as pd
+from Bio.PDB.DSSP import dssp_dict_from_pdb_file
 
 import atom3.database as db
-
-from Bio.PDB.DSSP import dssp_dict_from_pdb_file
 
 # Max number of residues allowed.  Prevents processing of massive PDB
 # structures.
