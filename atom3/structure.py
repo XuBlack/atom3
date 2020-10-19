@@ -177,7 +177,7 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
             biopy_structure = new_structure
 
         # Extract secondary structure (SS) and accessible surface area (ASA) values for each PDB file using DSSP
-        dssp_dict = get_dssp_dict_for_pdb_file(_)  # Extract PDB filename from GZ archive filename
+        # dssp_dict = get_dssp_dict_for_pdb_file(_)  # TODO: Relocate logic to postprocessing script
 
         atoms = []
         for residue in Bio.PDB.Selection.unfold_entities(biopy_structure, 'R'):
@@ -192,14 +192,17 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
             atom.get_parent().get_full_id()[2],
             str(atom.get_parent().get_id()[1]) + atom.get_parent().get_id()[2],
             atom.get_parent().get_resname(),
-            get_dssp_value_for_residue(dssp_dict, 'SS',
-                                       atom.get_parent().get_full_id()[2],
-                                       atom.get_parent().get_id(),
-                                       atom.get_parent().get_resname()),
-            get_dssp_value_for_residue(dssp_dict, 'RSA',
-                                       atom.get_parent().get_full_id()[2],
-                                       atom.get_parent().get_id(),
-                                       atom.get_parent().get_resname()),
+            # TODO: Relocate logic to postprocessing script
+            # get_dssp_value_for_residue(dssp_dict, 'SS',
+            #                            atom.get_parent().get_full_id()[2],
+            #                            atom.get_parent().get_id(),
+            #                            atom.get_parent().get_resname()),
+            # get_dssp_value_for_residue(dssp_dict, 'RSA',
+            #                            atom.get_parent().get_full_id()[2],
+            #                            atom.get_parent().get_id(),
+            #                            atom.get_parent().get_resname()),
+            '',
+            0.0,
             atom.get_coord()[0],
             atom.get_coord()[1],
             atom.get_coord()[2],
