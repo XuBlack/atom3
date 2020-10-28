@@ -1,15 +1,15 @@
 """Code to do with pdb structure sequences."""
-import cPickle as pickle
 import os
+import pickle
 
 import Bio
+import Bio.PDB.Polypeptide as poly
 import Bio.SeqIO
 import Bio.SeqRecord
-import Bio.PDB.Polypeptide as poly
 import pandas as pd
 
-import atom3.structure as struct
 import atom3.database as db
+import atom3.structure as struct
 
 
 def write_fasta(seq_dict, fasta_out, id_out=None):

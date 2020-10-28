@@ -1,18 +1,18 @@
 import collections as col
-import dill
 import logging
 import multiprocessing as mp
 import os
 
+import dill
 import numpy as np
 import pandas as pd
+import parallel as par
 
 import atom3.case as ca
 import atom3.complex as comp
 import atom3.database as db
 import atom3.neighbors as nb
 import atom3.structure as struct
-import parallel as par
 
 Pair = col.namedtuple(
         'Pair', ['complex', 'df0', 'df1', 'pos_idx', 'neg_idx', 'srcs', 'id'])

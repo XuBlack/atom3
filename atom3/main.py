@@ -9,17 +9,17 @@ import sys
 
 def add_pipeline_parsers(subparsers, pp):
     """Add new pandas and tfrecords pipeline."""
-    import parse as pa
-    pa.add_parse_parser(subparsers, pp)
+    from .parse import add_parse_parser
+    add_parse_parser(subparsers, pp)
 
-    import complex as comp
-    comp.add_complexes_parser(subparsers, pp)
+    from .complex import add_complexes_parser
+    add_complexes_parser(subparsers, pp)
 
-    import pair as pa
-    pa.add_pairs_parser(subparsers, pp)
+    from .pair import add_pairs_parser
+    add_pairs_parser(subparsers, pp)
 
-    import conservation as co
-    co.add_conservation_parser(subparsers, pp)
+    from .conservation import add_conservation_parser
+    add_conservation_parser(subparsers, pp)
 
 
 def main():

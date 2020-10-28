@@ -1,18 +1,18 @@
 from setuptools import setup
 
 setup(
-    name='atom3',
+    name='atom3-py3',
     packages=['atom3'],
-    url='https://github.com/raphtown/atom3',
-    version='0.1.4',
-    description='3D Atomic Data Processing',
+    url='https://github.com/amorehead/atom3',
+    version='0.1.4.1',
+    description='3D Atomic Data Processing (Python 3 version)',
     long_description=open("README.rst").read(),
     author='Raphael Townshend',
     license='MIT',
     install_requires=[
         'biopython',
         'click',
-        'easy-parallel',
+        'easy-parallel-py3',
         'h5py',
         'pandas',
         'scipy',

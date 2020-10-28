@@ -1,14 +1,14 @@
-atom3
-=====
+atom3-py3
+=========
 
-Processing of 3D atomic data.
+Processing of 3D atomic data (Python 3 version).
 
 Installation
 ------------
 
 .. code-block:: console
 
-    $ pip install atom3 
+    $ pip3 install atom3
 
 Usage
 -----
@@ -38,8 +38,8 @@ For help on commands.
     $ atom3 -h
     $ atom3 parse -h
 
-Generate wheel (.whl) file for use with a local installation of the DIPS data parser.
+(Optional) Generate wheel (.whl) file for use with a local installation of the DIPS data parser.
 
 .. code-block:: console
 
-    $ python setup.py bdist_wheel
+    $ python3 setup.py bdist_wheel

@@ -1,14 +1,14 @@
 """A full test case consisting of a bound and matching unbound complex."""
 import logging
+import multiprocessing as mp
 import os
 import pickle
 import tempfile
 
 import Bio.Blast.Applications as app
 import Bio.PDB
-import Bio.SeqIO
 import Bio.SVDSuperimposer as svd
-import multiprocessing as mp
+import Bio.SeqIO
 import numpy as np
 import parallel as par
 

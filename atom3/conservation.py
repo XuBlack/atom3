@@ -1,7 +1,7 @@
-import cPickle as pickle
 import logging
 import multiprocessing as mp
 import os
+import pickle
 import subprocess
 import timeit
 

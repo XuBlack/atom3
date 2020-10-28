@@ -11,7 +11,6 @@ import Bio.PDB
 import Bio.PDB.Polypeptide as poly
 import numpy as np
 import pandas as pd
-from Bio.PDB.DSSP import dssp_dict_from_pdb_file
 
 import atom3.database as db
 
@@ -41,76 +40,6 @@ expected = {
     "MET": 8,
     "GLN": 9,
 }
-
-# Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3836772/
-normalization_constants = {
-    "TRP": 285.0,
-    "PHE": 240.0,
-    "LYS": 236.0,
-    "PRO": 159.0,
-    "ASP": 193.0,
-    "ALA": 129.0,
-    "ARG": 274.0,
-    "CYS": 167.0,
-    "VAL": 174.0,
-    "THR": 172.0,
-    "GLY": 104.0,
-    "SER": 155.0,
-    "HIS": 224.0,
-    "LEU": 201.0,
-    "GLU": 223.0,
-    "TYR": 263.0,
-    "ILE": 197.0,
-    "ASN": 195.0,
-    "MET": 224.0,
-    "GLN": 225.0,
-}
-
-
-def normalize_asa_value_to_rsa_value(asa_value, res_code):
-    """
-    Normalize an accessible surface area (ASA) value into a
-    corresponding relative solvent accessibility (RSA) value
-    by dividing the original ASA value by a theoretically-determined
-    constant for the type of residue to which the ASA value corresponds.
-    """
-    rsa_value = None
-    try:
-        normalization_factor = normalization_constants[res_code]
-        rsa_value = asa_value / normalization_factor
-    except Exception:
-        logging.info("Invalid ASA value of {:}".format(asa_value))
-    return rsa_value
-
-
-def get_dssp_dict_for_pdb_file(pdb_filename):
-    """Run DSSP to calculate secondary structure features for a given PDB file."""
-    dssp_dict = {}
-    try:
-        dssp_tuple = dssp_dict_from_pdb_file(pdb_filename)
-        dssp_dict = dssp_tuple[0]
-    except Exception:
-        logging.info("No DSSP features found for {:}".format(pdb_filename))
-    return dssp_dict
-
-
-def get_dssp_value_for_residue(dssp_dict, feature, chain, residue, res_code):
-    """
-    Return a secondary structure (SS) value or a
-    relative solvent accessibility (RSA) value for
-    a given chain-residue pair.
-    """
-    dssp_value = None
-    try:
-        if feature is 'SS':
-            dssp_values = dssp_dict[(chain, residue)]
-            dssp_value = dssp_values[1]
-        elif feature is 'RSA':
-            dssp_values = dssp_dict[(chain, residue)]
-            dssp_value = normalize_asa_value_to_rsa_value(dssp_values[2], res_code)
-    except Exception:
-        logging.info("No DSSP entry found for {:}".format((chain, residue)))
-    return dssp_value
 
 
 def extract_c_alpha_regions(structure, radius_ang, detailed=False):
@@ -176,9 +105,6 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
             new_structure.add(biopy_structure[0])
             biopy_structure = new_structure
 
-        # Extract secondary structure (SS) and accessible surface area (ASA) values for each PDB file using DSSP
-        # dssp_dict = get_dssp_dict_for_pdb_file(_)  # TODO: Relocate logic to postprocessing script
-
         atoms = []
         for residue in Bio.PDB.Selection.unfold_entities(biopy_structure, 'R'):
             # Prune out things that aren't actually residue atoms.
@@ -192,17 +118,6 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
             atom.get_parent().get_full_id()[2],
             str(atom.get_parent().get_id()[1]) + atom.get_parent().get_id()[2],
             atom.get_parent().get_resname(),
-            # TODO: Relocate logic to postprocessing script
-            # get_dssp_value_for_residue(dssp_dict, 'SS',
-            #                            atom.get_parent().get_full_id()[2],
-            #                            atom.get_parent().get_id(),
-            #                            atom.get_parent().get_resname()),
-            # get_dssp_value_for_residue(dssp_dict, 'RSA',
-            #                            atom.get_parent().get_full_id()[2],
-            #                            atom.get_parent().get_id(),
-            #                            atom.get_parent().get_resname()),
-            '',
-            0.0,
             atom.get_coord()[0],
             atom.get_coord()[1],
             atom.get_coord()[2],
@@ -215,8 +130,6 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
                 'chain',
                 'residue',
                 'resname',
-                'ss_value',
-                'rsa_value',
                 'x',
                 'y',
                 'z',

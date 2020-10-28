@@ -1,16 +1,12 @@
 """All functions related to processing PDB datasets."""
 import collections as col
-import logging
-
 import glob
 import gzip
+import logging
 import os.path
-import re
 
 import Bio.PDB
 import numpy as np
-
-from Bio.PDB.DSSP import dssp_dict_from_pdb_file
 
 
 def identity(x):
@@ -253,24 +249,6 @@ def _is_pdb_snapshot(pdb_snapshot, extension=None):
     """Check if provided file is a directory of pdb groups."""
     return len(_get_pdb_snapshot_filenames(
         pdb_snapshot, extension=extension)) != 0
-
-
-def _is_pdb_file_with_dssp_features(pdb_filename):
-    """Check if provided PDB file has DSSP-calculable features."""
-    _, ext = os.path.splitext(pdb_filename)
-    if re.match(".pdb[0-9]$", ext) or ext == ".gz":
-        try:
-            if ext == ".gz":
-                extracted_pdb_filename = pdb_filename[:-3]
-                dssp_dict_from_pdb_file(extracted_pdb_filename)
-            else:
-                dssp_dict_from_pdb_file(pdb_filename)
-            return True
-        except Exception:
-            logging.info("No DSSP features found for {:}".format(pdb_filename))
-            return False
-    else:
-        return True
 
 
 def _get_pdb_list_from_file(pdb_file_list, extension=None):

@@ -38,7 +38,7 @@ def parse_all(pdb_dataset, output_dir, num_cpus):
     produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
     work_keys = [key for key in requested_keys if key not in produced_keys]
     work_filenames = [x[0] for x in
-                      db.get_all_filenames(work_keys, pdb_dataset, enforcement=2)]
+                      db.get_all_filenames(work_keys, pdb_dataset)]
 
     logging.info("{:} requested keys, {:} produced keys, {:} work keys"
                  .format(len(requested_keys), len(produced_keys),
