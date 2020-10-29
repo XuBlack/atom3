@@ -70,7 +70,7 @@ def get_complexes(filenames, type):
 
 
 def read_complexes(input_dill):
-    with open(input_dill, 'r') as f:
+    with open(input_dill, 'rb') as f:
         complexes = dill.load(f)
     return complexes
 
@@ -81,7 +81,7 @@ def write_complexes(complexes, output_dill):
             "Complex file {:} already exists!".format(output_dill))
     if not os.path.exists(os.path.dirname(output_dill)):
         os.makedirs(os.path.dirname(output_dill))
-    with open(output_dill, 'w') as f:
+    with open(output_dill, 'wb') as f:
         dill.dump(complexes, f)
 
 

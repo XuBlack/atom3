@@ -114,13 +114,13 @@ def complex_to_pairs(complex, get_pairs, output_dir):
 
 def write_pair_as_dill(pair, output_dill):
     """Write pair as dill file."""
-    with open(output_dill, 'w') as f:
+    with open(output_dill, 'wb') as f:
         dill.dump(pair, f)
 
 
 def read_pair_from_dill(input_dill):
     """Read pair from dill file."""
-    with open(input_dill, 'r') as f:
+    with open(input_dill, 'rb') as f:
         return dill.load(f)
 
 
