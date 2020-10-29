@@ -8,7 +8,7 @@ Installation
 
 .. code-block:: console
 
-    $ pip3 install atom3
+    $ pip3 install atom3-py3
 
 Usage
 -----
