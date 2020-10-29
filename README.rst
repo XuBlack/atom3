@@ -37,9 +37,3 @@ For help on commands.
 
     $ atom3 -h
     $ atom3 parse -h
-
-(Optional) Generate wheel (.whl) file for use with a local installation of the DIPS data parser.
-
-.. code-block:: console
-
-    $ python3 setup.py bdist_wheel
