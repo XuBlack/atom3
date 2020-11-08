@@ -279,7 +279,7 @@ def _get_positions(df0, pos_ca0, df1, pos_ca1, full):
         idx1 = ca1.index.get_loc(p1)
         pos_idxs.append((idx0, idx1))
     pos_idxs = np.array(pos_idxs)
-    pos_flat = np.ravel_multi_index(
+    pos_flat = np.array([0]) if pos_idxs.size == 0 else np.ravel_multi_index(
         (pos_idxs[:, 0], pos_idxs[:, 1]), (num0, num1))
     neg_flat = np.arange(num_total)
     neg_flat = np.delete(neg_flat, pos_flat)
