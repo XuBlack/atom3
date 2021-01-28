@@ -47,9 +47,9 @@ def _get_heavy_neighbors(df0, df1, cutoff):
     pairs = np.array(np.where(dist < cutoff)).T
     if len(pairs) == 0:
         return [], []
-    # We use the found pairs to find unique pairings of residues.
-    res0 = heavy0.iloc[pairs[:, 0]][['pdb_name', 'model', 'chain', 'residue']]
-    res1 = heavy1.iloc[pairs[:, 1]][['pdb_name', 'model', 'chain', 'residue']]
+    # We use the found pairs to find unique pairings of atoms.
+    res0 = heavy0.iloc[pairs[:, 0]][['pdb_name', 'model', 'chain', 'residue', 'element', 'aid']]
+    res1 = heavy1.iloc[pairs[:, 1]][['pdb_name', 'model', 'chain', 'residue', 'element', 'aid']]
     res0 = res0.reset_index(drop=True)
     res1 = res1.reset_index(drop=True)
     # We concatenate so that we can find unique _pairs_.
