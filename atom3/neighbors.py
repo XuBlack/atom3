@@ -48,8 +48,8 @@ def _get_heavy_neighbors(df0, df1, cutoff):
     if len(pairs) == 0:
         return [], []
     # We use the found pairs to find unique pairings of atoms.
-    res0 = heavy0.iloc[pairs[:, 0]][['pdb_name', 'model', 'chain', 'residue', 'element', 'aid']]
-    res1 = heavy1.iloc[pairs[:, 1]][['pdb_name', 'model', 'chain', 'residue', 'element', 'aid']]
+    res0 = heavy0.iloc[pairs[:, 0]]
+    res1 = heavy1.iloc[pairs[:, 1]]
     res0 = res0.reset_index(drop=True)
     res1 = res1.reset_index(drop=True)
     # We concatenate so that we can find unique _pairs_.
