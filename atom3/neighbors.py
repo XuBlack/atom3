@@ -39,7 +39,7 @@ def _get_ca_neighbors(df0, df1, cutoff):
 
 
 def _get_heavy_neighbors(df0, df1, cutoff):
-    """Get neighbors for heavy atom based distance."""
+    """Get neighbors for heavy atom-based distance."""
     heavy0 = df0[df0['element'] != 'H']
     heavy1 = df1[df1['element'] != 'H']
 
@@ -48,16 +48,16 @@ def _get_heavy_neighbors(df0, df1, cutoff):
     if len(pairs) == 0:
         return [], []
     # We use the found pairs to find unique pairings of atoms.
-    res0 = heavy0.iloc[pairs[:, 0]]
-    res1 = heavy1.iloc[pairs[:, 1]]
-    res0 = res0.reset_index(drop=True)
-    res1 = res1.reset_index(drop=True)
-    # We concatenate so that we can find unique _pairs_.
-    res = pd.concat((res0, res1), axis=1)
-    res = res.drop_duplicates()
+    atoms0 = heavy0.iloc[pairs[:, 0]]
+    atoms1 = heavy1.iloc[pairs[:, 1]]
+    atoms0 = atoms0.reset_index(drop=True)
+    atoms1 = atoms1.reset_index(drop=True)
+    # We concatenate so that we can find unique pairs.
+    atoms = pd.concat((atoms0, atoms1), axis=1)
+    atoms = atoms.drop_duplicates()
     # Split back out now that we have found duplicates.
-    res0 = res.iloc[:, range(4)]
-    res1 = res.iloc[:, range(4, 8)]
-    res0 = res0.reset_index(drop=True)
-    res1 = res1.reset_index(drop=True)
-    return res0, res1
+    atoms0 = atoms.iloc[:, range(11)]
+    atoms1 = atoms.iloc[:, range(11, 22)]
+    atoms0 = atoms0.reset_index(drop=True)
+    atoms1 = atoms1.reset_index(drop=True)
+    return atoms0, atoms1

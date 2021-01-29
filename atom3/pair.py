@@ -14,7 +14,7 @@ import atom3.database as db
 import atom3.neighbors as nb
 
 Pair = col.namedtuple(
-    'Pair', ['complex', 'df0', 'df1', 'pos_atom_idxs', 'neg_atom_idxs', 'srcs', 'id'])
+    'Pair', ['complex', 'df0', 'df1', 'pos_heavy_atom_idxs', 'srcs', 'id'])
 
 sem = mp.Semaphore()
 
@@ -221,10 +221,9 @@ def _get_db5_pairs(complex, unbound, nb_fn, full):
     else:
         ldf, rdf = lb_df, rb_df
         lsrc, rsrc = lb, rb
-    pos_idxs, neg_idxs = _get_atom_positions(ldf, lres, rdf, rres, full)
+    pos_heavy_atom_idxs, neg_heavy_atom_idxs = _get_atom_positions(ldf, lres, rdf, rres, full)
     srcs = {'src0': lsrc, 'src1': rsrc}
-    pair = Pair(complex=complex.name, df0=ldf, df1=rdf, pos_atom_idxs=pos_idxs,
-                neg_atom_idxs=neg_idxs, srcs=srcs, id=0)
+    pair = Pair(complex=complex.name, df0=ldf, df1=rdf, pos_heavy_atom_idxs=pos_heavy_atom_idxs, srcs=srcs, id=0)
     return [pair], 2
 
 
@@ -243,31 +242,31 @@ def _get_all_chain_pairs(complex, df, nb_fn, filename, full):
         (chain0, df0) = groups[i]
         for j in range(i + 1, num_chains):
             (chain1, df1) = groups[j]
-            atoms0, atoms1 = nb_fn(df0, df1)
-            if len(atoms0) == 0:
+            pos_atoms0, pos_atoms1 = nb_fn(df0, df1)
+            if len(pos_atoms0) == 0:
                 # No neighbors between these 2 chains.
                 continue
             else:
                 num_pairs += 1
-            pos_atom_idxs, neg_atom_idxs = _get_atom_positions(df0, atoms0, df1, atoms1, full)
+            pos_heavy_atom_idxs = np.stack((pos_atoms0['aid'], pos_atoms1['aid'])).T  # Concatenate structures' labels
             srcs = {'src0': filename, 'src1': filename}
-            pair = Pair(complex=complex.name, df0=df0, df1=df1, pos_atom_idxs=pos_atom_idxs,
-                        neg_atom_idxs=neg_atom_idxs, srcs=srcs, id=pair_idx)
+            pair = Pair(complex=complex.name, df0=df0, df1=df1,
+                        pos_heavy_atom_idxs=pos_heavy_atom_idxs, srcs=srcs, id=pair_idx)
             pairs.append(pair)
             pair_idx += 1
     return pairs, num_chains
 
 
-def _get_atom_positions(df0, pos_atom0, df1, pos_atom1, full):
+def _get_atom_positions(df0, pos_atoms0, df1, pos_atoms1, full):
     """Get negative atom pairings given positive atom pairings."""
     heavy0 = df0[df0['element'] != 'H']
     heavy1 = df1[df1['element'] != 'H']
 
     num0, num1 = heavy0.shape[0], heavy1.shape[0]
-    num_pos = pos_atom0.shape[0]
+    num_pos = pos_atoms0.shape[0]
     num_total = num0 * num1
     pos_idxs = []
-    for p0, p1 in zip(pos_atom0.index, pos_atom1.index):
+    for p0, p1 in zip(pos_atoms0.index, pos_atoms1.index):
         idx0 = heavy0.index.get_loc(p0)
         idx1 = heavy1.index.get_loc(p1)
         pos_idxs.append((idx0, idx1))
@@ -283,5 +282,5 @@ def _get_atom_positions(df0, pos_atom0, df1, pos_atom1, full):
     neg_atoms0 = heavy0.iloc[neg_idxs[:, 0]]
     neg_atoms1 = heavy1.iloc[neg_idxs[:, 1]]
     neg_atom_idxs = np.stack((neg_atoms0.index.values, neg_atoms1.index.values)).T
-    pos_atom_idxs = np.stack((pos_atom0.index.values, pos_atom1.index.values)).T
+    pos_atom_idxs = np.stack((pos_atoms0.index.values, pos_atoms1.index.values)).T
     return pos_atom_idxs, neg_atom_idxs
