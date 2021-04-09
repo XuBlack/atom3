@@ -143,10 +143,10 @@ def get_pairs(neighbor_def, complex, type, unbound, nb_fn, full):
             _get_rcsb_pairs(neighbor_def, complex, unbound, nb_fn, full)
     elif type == 'db5' or type == 'db5mut' or type == 'hotspot':
         pairs, num_subunits = \
-            _get_db5_pairs(neighbor_def, complex, unbound, nb_fn, full)
+            _get_db5_pairs(complex, unbound, nb_fn, full)
     elif type == 'dockground':
         pairs, num_subunits = \
-            _get_db5_pairs(neighbor_def, complex, unbound, nb_fn, full)
+            _get_db5_pairs(complex, unbound, nb_fn, full)
     else:
         raise RuntimeError("Unrecognized dataset type {:}".format(type))
     return pairs, num_subunits
@@ -174,7 +174,7 @@ def _get_rcsb_pairs(neighbor_def, complex, unbound, nb_fn, full):
     return pairs, num_chains
 
 
-def _get_db5_pairs(neighbor_def, complex, unbound, nb_fn, full):
+def _get_db5_pairs(complex, unbound, nb_fn, full):
     """
     Get pairs for docking benchmark 5 type complex.
 
