@@ -42,7 +42,7 @@ def _get_non_heavy_neighbor_residues(df0, df1, cutoff):
     res1 = non_heavy1.iloc[pairs[:, 1]][['pdb_name', 'model', 'chain', 'residue']]
     res0 = res0.reset_index(drop=True)
     res1 = res1.reset_index(drop=True)
-    # # Concatenate so that we can find unique _pairs_.
+    # We concatenate so that we can find unique _pairs_.
     res = pd.concat((res0, res1), axis=1)
     res = res.drop_duplicates()
     # # Split back out now that we have found duplicates.
