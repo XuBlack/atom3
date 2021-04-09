@@ -142,8 +142,17 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
 def get_ca_pos_from_residues(df, res):
     """Look up alpha carbon positions of provided residues."""
     ca = df[df['atom_name'] == 'CA'].reset_index().set_index(
-        ['pdb_name', 'model', 'chain', 'residue', 'element', 'aid'])
+        ['pdb_name', 'model', 'chain', 'residue'])
     nb = ca.reindex(res)
+    nb = nb.reset_index().set_index('index')
+    return nb
+
+
+def get_ca_pos_from_atoms(df, atoms):
+    """Look up alpha carbon positions of provided atoms."""
+    ca = df[df['atom_name'] == 'CA'].reset_index().set_index(
+        ['pdb_name', 'model', 'chain', 'residue'])
+    nb = ca.reindex(atoms)
     nb = nb.reset_index().set_index('index')
     return nb
 

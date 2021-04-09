@@ -12,9 +12,10 @@ import atom3.case as ca
 import atom3.complex as comp
 import atom3.database as db
 import atom3.neighbors as nb
+from atom3.structure import get_ca_pos_from_residues, get_ca_pos_from_atoms
 
 Pair = col.namedtuple(
-    'Pair', ['complex', 'df0', 'df1', 'pos_heavy_atom_idxs', 'srcs', 'id'])
+    'Pair', ['complex', 'df0', 'df1', 'pos_idx', 'neg_idx', 'srcs', 'id'])
 
 sem = mp.Semaphore()
 
@@ -122,14 +123,14 @@ def read_pair_from_dill(input_dill):
         return dill.load(f)
 
 
-def build_get_pairs(type, unbound, nb_fn, full):
+def build_get_pairs(neighbor_def, type, unbound, nb_fn, full):
     def get_pairs_param(complex):
-        return get_pairs(complex, type, unbound, nb_fn, full)
+        return get_pairs(neighbor_def, complex, type, unbound, nb_fn, full)
 
     return get_pairs_param
 
 
-def get_pairs(complex, type, unbound, nb_fn, full):
+def get_pairs(neighbor_def, complex, type, unbound, nb_fn, full):
     """
     Get pairings for provided complex.
 
@@ -139,19 +140,19 @@ def get_pairs(complex, type, unbound, nb_fn, full):
     """
     if type == 'rcsb':
         pairs, num_subunits = \
-            _get_rcsb_pairs(complex, unbound, nb_fn, full)
+            _get_rcsb_pairs(neighbor_def, complex, unbound, nb_fn, full)
     elif type == 'db5' or type == 'db5mut' or type == 'hotspot':
         pairs, num_subunits = \
-            _get_db5_pairs(complex, unbound, nb_fn, full)
+            _get_db5_pairs(neighbor_def, complex, unbound, nb_fn, full)
     elif type == 'dockground':
         pairs, num_subunits = \
-            _get_db5_pairs(complex, unbound, nb_fn, full)
+            _get_db5_pairs(neighbor_def, complex, unbound, nb_fn, full)
     else:
         raise RuntimeError("Unrecognized dataset type {:}".format(type))
     return pairs, num_subunits
 
 
-def _get_rcsb_pairs(complex, unbound, nb_fn, full):
+def _get_rcsb_pairs(neighbor_def, complex, unbound, nb_fn, full):
     """
     Get pairs for rcsb type complex.
 
@@ -169,11 +170,11 @@ def _get_rcsb_pairs(complex, unbound, nb_fn, full):
     if df.shape[0] == 0:
         return [], 0
     df = df[df['model'] == df['model'][0]]
-    pairs, num_chains = _get_all_chain_pairs(complex, df, nb_fn, pkl_filename, full)
+    pairs, num_chains = _get_all_chain_pairs(neighbor_def, complex, df, nb_fn, pkl_filename, full)
     return pairs, num_chains
 
 
-def _get_db5_pairs(complex, unbound, nb_fn, full):
+def _get_db5_pairs(neighbor_def, complex, unbound, nb_fn, full):
     """
     Get pairs for docking benchmark 5 type complex.
 
@@ -194,11 +195,9 @@ def _get_db5_pairs(complex, unbound, nb_fn, full):
 
         # Convert residues' pdb_names to unbound.
         lres['pdb_name'] = lres['pdb_name'].map(
-            lambda x: ca.find_of_type(
-                x, ldf['pdb_name'].as_matrix(), None, False, style='db5'))
+            lambda x: ca.find_of_type(x, ldf['pdb_name'].values, None, False, style='db5'))
         rres['pdb_name'] = rres['pdb_name'].map(
-            lambda x: ca.find_of_type(
-                x, rdf['pdb_name'].as_matrix(), None, False, style='db5'))
+            lambda x: ca.find_of_type(x, rdf['pdb_name'].values, None, False, style='db5'))
 
         # Remove residues that we cannot map from bound structure to unbound.
         rres_index = rres[['pdb_name', 'model', 'chain', 'residue']]
@@ -221,18 +220,16 @@ def _get_db5_pairs(complex, unbound, nb_fn, full):
     else:
         ldf, rdf = lb_df, rb_df
         lsrc, rsrc = lb, rb
-    pos_heavy_atom_idxs, neg_heavy_atom_idxs = _get_atom_positions(ldf, lres, rdf, rres, full)
+    pos_idx, neg_idx = _get_atom_positions(ldf, lres, rdf, rres, full)
     srcs = {'src0': lsrc, 'src1': rsrc}
-    pair = Pair(complex=complex.name, df0=ldf, df1=rdf, pos_heavy_atom_idxs=pos_heavy_atom_idxs, srcs=srcs, id=0)
+    pair = Pair(complex=complex.name, df0=ldf, df1=rdf, pos_idx=pos_idx, neg_idx=neg_idx, srcs=srcs, id=0)
     return [pair], 2
 
 
-def _get_all_chain_pairs(complex, df, nb_fn, filename, full):
+def _get_all_chain_pairs(neighbor_def, complex, df, nb_fn, filename, full):
     """Get all possible chain pairs from provided dataframe."""
-
     pairs = []
-    # We reset the index here so each's chain dataframe can be treated
-    # independently.
+    # We reset the index here so each chain's dataframe can be treated independently.
     groups = [(x[0], x[1].reset_index(drop=True))
               for x in df.groupby(['chain', 'model'])]
     num_chains = len(groups)
@@ -242,33 +239,101 @@ def _get_all_chain_pairs(complex, df, nb_fn, filename, full):
         (chain0, df0) = groups[i]
         for j in range(i + 1, num_chains):
             (chain1, df1) = groups[j]
-            pos_atoms0, pos_atoms1 = nb_fn(df0, df1)
-            if len(pos_atoms0) == 0:
-                # No neighbors between these 2 chains.
-                continue
-            else:
-                num_pairs += 1
-            pos_heavy_atom_idxs = np.stack((pos_atoms0['aid'], pos_atoms1['aid'])).T  # Concatenate structures' labels
+            if 'atom' in neighbor_def:
+                atoms0, atoms1 = nb_fn(df0, df1)
+                if len(atoms0) == 0:
+                    # No neighbors between these 2 chains.
+                    continue
+                else:
+                    num_pairs += 1
+                pos0 = get_ca_pos_from_atoms(df0, atoms0)
+                pos1 = get_ca_pos_from_atoms(df1, atoms1)
+                pos_idx, neg_idx = _get_atoms_positions(df0, pos0, df1, pos1, full)
+            else:  # Use residue-level neighbor function
+                res0, res1 = nb_fn(df0, df1)
+                if len(res0) == 0:
+                    # No neighbors between these 2 chains.
+                    continue
+                else:
+                    num_pairs += 1
+                pos0 = get_ca_pos_from_residues(df0, res0)
+                pos1 = get_ca_pos_from_residues(df1, res1)
+                pos_idx, neg_idx = _get_residue_positions(df0, pos0, df1, pos1, full)
             srcs = {'src0': filename, 'src1': filename}
             pair = Pair(complex=complex.name, df0=df0, df1=df1,
-                        pos_heavy_atom_idxs=pos_heavy_atom_idxs, srcs=srcs, id=pair_idx)
+                        pos_idx=pos_idx, neg_idx=neg_idx, srcs=srcs, id=pair_idx)
             pairs.append(pair)
             pair_idx += 1
     return pairs, num_chains
 
 
+def _get_residue_positions(df0, pos_ca0, df1, pos_ca1, full):
+    """Get negative pairings given positive pairings."""
+    ca0 = df0[df0['atom_name'] == 'CA']
+    ca1 = df1[df1['atom_name'] == 'CA']
+    num0, num1 = ca0.shape[0], ca1.shape[0]
+    num_pos = pos_ca0.shape[0]
+    num_total = num0 * num1
+    pos_idxs = []
+    for p0, p1 in zip(pos_ca0.index, pos_ca1.index):
+        idx0 = ca0.index.get_loc(p0)
+        idx1 = ca1.index.get_loc(p1)
+        pos_idxs.append((idx0, idx1))
+    pos_idxs = np.array(pos_idxs)
+    pos_flat = np.ravel_multi_index(
+        (pos_idxs[:, 0], pos_idxs[:, 1]), (num0, num1))
+    neg_flat = np.arange(num_total)
+    neg_flat = np.delete(neg_flat, pos_flat)
+    if not full:
+        np.random.shuffle(neg_flat)
+        neg_flat = neg_flat[:num_pos]
+    neg_idxs = np.array(np.unravel_index(neg_flat, (num0, num1))).T
+    neg_ca0 = ca0.iloc[neg_idxs[:, 0]]
+    neg_ca1 = ca1.iloc[neg_idxs[:, 1]]
+    neg_ca_idxs = np.stack((neg_ca0.index.values, neg_ca1.index.values)).T
+    pos_ca_idxs = np.stack((pos_ca0.index.values, pos_ca1.index.values)).T
+    return pos_ca_idxs, neg_ca_idxs
+
+
+def _get_atoms_positions(df0, pos_ca0, df1, pos_ca1, full):
+    """Get negative pairings given positive pairings."""
+    ca0 = df0[df0['atom_name'] == 'CA']
+    ca1 = df1[df1['atom_name'] == 'CA']
+    num0, num1 = ca0.shape[0], ca1.shape[0]
+    num_pos = pos_ca0.shape[0]
+    num_total = num0 * num1
+    pos_idxs = []
+    for p0, p1 in zip(pos_ca0.index, pos_ca1.index):
+        idx0 = ca0.index.get_loc(p0)
+        idx1 = ca1.index.get_loc(p1)
+        pos_idxs.append((idx0, idx1))
+    pos_idxs = np.array(pos_idxs)
+    pos_flat = np.ravel_multi_index(
+        (pos_idxs[:, 0], pos_idxs[:, 1]), (num0, num1))
+    neg_flat = np.arange(num_total)
+    neg_flat = np.delete(neg_flat, pos_flat)
+    if not full:
+        np.random.shuffle(neg_flat)
+        neg_flat = neg_flat[:num_pos]
+    neg_idxs = np.array(np.unravel_index(neg_flat, (num0, num1))).T
+    neg_ca0 = ca0.iloc[neg_idxs[:, 0]]
+    neg_ca1 = ca1.iloc[neg_idxs[:, 1]]
+    neg_ca_idxs = np.stack((neg_ca0.index.values, neg_ca1.index.values)).T
+    pos_ca_idxs = np.stack((pos_ca0.index.values, pos_ca1.index.values)).T
+    return pos_ca_idxs, neg_ca_idxs
+
+
 def _get_atom_positions(df0, pos_atoms0, df1, pos_atoms1, full):
     """Get negative atom pairings given positive atom pairings."""
-    heavy0 = df0[df0['element'] != 'H']
-    heavy1 = df1[df1['element'] != 'H']
-
-    num0, num1 = heavy0.shape[0], heavy1.shape[0]
+    non_heavy0 = df0[df0['element'] != 'H']
+    non_heavy1 = df1[df1['element'] != 'H']
+    num0, num1 = non_heavy0.shape[0], non_heavy1.shape[0]
     num_pos = pos_atoms0.shape[0]
     num_total = num0 * num1
     pos_idxs = []
     for p0, p1 in zip(pos_atoms0.index, pos_atoms1.index):
-        idx0 = heavy0.index.get_loc(p0)
-        idx1 = heavy1.index.get_loc(p1)
+        idx0 = non_heavy0.index.get_loc(p0)
+        idx1 = non_heavy1.index.get_loc(p1)
         pos_idxs.append((idx0, idx1))
     pos_idxs = np.array(pos_idxs)
     pos_flat = np.array([0]) if pos_idxs.size == 0 else np.ravel_multi_index(
@@ -279,8 +344,8 @@ def _get_atom_positions(df0, pos_atoms0, df1, pos_atoms1, full):
         np.random.shuffle(neg_flat)
         neg_flat = neg_flat[:num_pos]
     neg_idxs = np.array(np.unravel_index(neg_flat, (num0, num1))).T
-    neg_atoms0 = heavy0.iloc[neg_idxs[:, 0]]
-    neg_atoms1 = heavy1.iloc[neg_idxs[:, 1]]
+    neg_atoms0 = non_heavy0.iloc[neg_idxs[:, 0]]
+    neg_atoms1 = non_heavy1.iloc[neg_idxs[:, 1]]
     neg_atom_idxs = np.stack((neg_atoms0.index.values, neg_atoms1.index.values)).T
     pos_atom_idxs = np.stack((pos_atoms0.index.values, pos_atoms1.index.values)).T
     return pos_atom_idxs, neg_atom_idxs

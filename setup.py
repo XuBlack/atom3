@@ -4,7 +4,7 @@ setup(
     name='atom3-py3',
     packages=['atom3'],
     url='https://github.com/amorehead/atom3',
-    version='0.1.5.0',
+    version='0.1.5.1',
     description='3D Atomic Data Processing (Python 3 version)',
     long_description=open("README.rst").read(),
     author='Raphael Townshend',
@@ -14,7 +14,7 @@ setup(
         'click',
         'easy-parallel-py3',
         'h5py',
-        'pandas',
+        'pandas>=0.24.0',
         'scipy',
     ],
     entry_points={
