@@ -150,8 +150,7 @@ def get_ca_pos_from_residues(df, res):
 
 def get_ca_pos_from_atoms(df, atoms):
     """Look up alpha carbon positions of provided atoms."""
-    ca = df[df['atom_name'] == 'CA'].reset_index().set_index(
-        ['pdb_name', 'model', 'chain', 'residue'])
+    ca = df[df['atom_name'] == 'CA'].reset_index()
     nb = ca.reindex(atoms)
     nb = nb.reset_index().set_index('index')
     return nb
