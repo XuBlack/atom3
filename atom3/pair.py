@@ -177,7 +177,6 @@ def _get_rcsb_pairs(neighbor_def, complex, unbound, nb_fn, full):
 def _get_db5_pairs(complex, unbound, nb_fn, full):
     """
     Get pairs for docking benchmark 5 type complex.
-
     For this type of complex, we assume that each file is its own entity,
     and that there is essentially one pair for each complex, with one side
     being all the chains of the ligand, and the other all the chains of the
@@ -195,9 +194,11 @@ def _get_db5_pairs(complex, unbound, nb_fn, full):
 
         # Convert residues' pdb_names to unbound.
         lres['pdb_name'] = lres['pdb_name'].map(
-            lambda x: ca.find_of_type(x, ldf['pdb_name'].values, None, False, style='db5'))
+            lambda x: ca.find_of_type(
+                x, ldf['pdb_name'].as_matrix(), None, False, style='db5'))
         rres['pdb_name'] = rres['pdb_name'].map(
-            lambda x: ca.find_of_type(x, rdf['pdb_name'].values, None, False, style='db5'))
+            lambda x: ca.find_of_type(
+                x, rdf['pdb_name'].as_matrix(), None, False, style='db5'))
 
         # Remove residues that we cannot map from bound structure to unbound.
         rres_index = rres[['pdb_name', 'model', 'chain', 'residue']]
@@ -210,9 +211,8 @@ def _get_db5_pairs(complex, unbound, nb_fn, full):
                  if not (np.array(x) == ldf_index).all(1).any()]
         gone = list(set(lgone).union(set(rgone)))
         if len(gone) > 0:
-            logging.warning(
-                "Dropping {:}/{:} residues from {:} that didn't map "
-                "to unbound from bound.".format(len(gone), len(lres), complex.name))
+            logging.warning("Dropping {:}/{:} residues from {:} that didn't map "
+                            "to unbound from bound.".format(len(gone), len(lres), complex.name))
             lres = lres.drop(gone)
             rres = rres.drop(gone)
 
@@ -220,7 +220,9 @@ def _get_db5_pairs(complex, unbound, nb_fn, full):
     else:
         ldf, rdf = lb_df, rb_df
         lsrc, rsrc = lb, rb
-    pos_idx, neg_idx = _get_atom_positions(ldf, lres, rdf, rres, full)
+    lpos = get_ca_pos_from_residues(ldf, lres)
+    rpos = get_ca_pos_from_residues(rdf, rres)
+    pos_idx, neg_idx = _get_residue_positions(ldf, lpos, rdf, rpos, full)
     srcs = {'src0': lsrc, 'src1': rsrc}
     pair = Pair(complex=complex.name, df0=ldf, df1=rdf, pos_idx=pos_idx, neg_idx=neg_idx, srcs=srcs, id=0)
     return [pair], 2
