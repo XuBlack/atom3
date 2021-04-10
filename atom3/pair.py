@@ -194,11 +194,9 @@ def _get_db5_pairs(complex, unbound, nb_fn, full):
 
         # Convert residues' pdb_names to unbound.
         lres['pdb_name'] = lres['pdb_name'].map(
-            lambda x: ca.find_of_type(
-                x, ldf['pdb_name'].as_matrix(), None, False, style='db5'))
+            lambda x: ca.find_of_type(x, ldf['pdb_name'].values, None, False, style='db5'))
         rres['pdb_name'] = rres['pdb_name'].map(
-            lambda x: ca.find_of_type(
-                x, rdf['pdb_name'].as_matrix(), None, False, style='db5'))
+            lambda x: ca.find_of_type(x, rdf['pdb_name'].values, None, False, style='db5'))
 
         # Remove residues that we cannot map from bound structure to unbound.
         rres_index = rres[['pdb_name', 'model', 'chain', 'residue']]
