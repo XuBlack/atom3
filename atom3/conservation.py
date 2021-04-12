@@ -31,7 +31,7 @@ def add_conservation_parser(subparsers, pp):
                     help='directory to output to')
     ap.add_argument('-c', metavar='cpus', default=mp.cpu_count(), type=int,
                     help='number of cpus to use for processing (default:'
-                    ' number processors available on current machine)')
+                         ' number processors available on current machine)')
 
 
 def gen_pssm(pdb_filename, blastdb, output_filename):
@@ -133,21 +133,15 @@ def map_pssms(pdb_filename, blastdb, output_filename):
     elapsed_writing = timeit.default_timer() - start_time_writing
 
     elapsed = timeit.default_timer() - start_time
-    logging.info(
-        ('For {:d} pssms generated from {} spent {:05.2f} blasting, '
-         '{:05.2f} writing, and {:05.2f} overall.')
-        .format(
-             num_chains,
-             pdb_name,
-             elapsed_blasting,
-             elapsed_writing,
-             elapsed))
+    logging.info(('For {:d} pssms generated from {} spent {:05.2f} blasting,'
+                  ' {:05.2f} writing, and {:05.2f} overall.').format(num_chains, pdb_name, elapsed_blasting,
+                                                                     elapsed_writing, elapsed))
 
 
 def _blast(query, output_pssm, output, blastdb):
     """Run PSIBlast on specified input."""
     psiblast_command = "psiblast -db {:} -query {:} -out_ascii_pssm {:} " + \
-        "-save_pssm_after_last_round -out {:}"
+                       "-save_pssm_after_last_round -out {:}"
     log_out = "{}.out".format(output)
     log_err = "{}.err".format(output)
     with open(log_out, 'a') as f_out:
@@ -195,25 +189,20 @@ def map_all_pssms(pdb_dataset, blastdb, output_dir, num_cpus):
     ext = '.pkl'
     requested_filenames = \
         db.get_structures_filenames(pdb_dataset, extension=ext)
-    requested_keys = [db.get_pdb_name(x)
-                      for x in requested_filenames]
+    requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
     produced_filenames = db.get_structures_filenames(
         output_dir, extension='.pkl')
-    produced_keys = [db.get_pdb_name(x)
-                     for x in produced_filenames]
+    produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
     work_keys = [key for key in requested_keys if key not in produced_keys]
-    work_filenames = [x[0] for x in
-                      db.get_all_filenames(
-                          work_keys, pdb_dataset, extension=ext,
-                          keyer=lambda x: db.get_pdb_name(x))]
+    work_filenames = [x[0] for x in db.get_all_filenames(work_keys, pdb_dataset, extension=ext,
+                                                         keyer=lambda x: db.get_pdb_name(x))]
 
     output_filenames = []
     for pdb_filename in work_filenames:
         sub_dir = output_dir + '/' + db.get_pdb_code(pdb_filename)[1:3]
         if not os.path.exists(sub_dir):
             os.makedirs(sub_dir)
-        output_filenames.append(
-            sub_dir + '/' + db.get_pdb_name(pdb_filename) + ".pkl")
+        output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + ".pkl")
 
     logging.info("{:} requested keys, {:} produced keys, {:} work keys"
                  .format(len(requested_keys), len(produced_keys),
