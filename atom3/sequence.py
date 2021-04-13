@@ -30,7 +30,7 @@ def write_fasta(seq_dict, fasta_out, id_out=None):
         id_dir = os.path.dirname(os.path.abspath(id_out))
         if not os.path.exists(id_dir):
             os.makedirs(id_dir)
-        with open(id_out, 'w') as f:
+        with open(id_out, 'wb') as f:
             pickle.dump(all_ids, f)
 
 
