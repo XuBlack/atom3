@@ -34,6 +34,60 @@ def add_conservation_parser(subparsers, pp):
                          ' number processors available on current machine)')
 
 
+# TODO: Test generation of protrusion indices
+def gen_protrusion_index(pdb_filename, output_filename):
+    """Generate protrusion index from structure."""
+    pdb_name = db.get_pdb_name(pdb_filename)
+    out_dir = os.path.dirname(output_filename)
+    work_dir = os.path.join(out_dir, 'work')
+    if not os.path.exists(work_dir):
+        os.makedirs(work_dir)
+    psaia_format = work_dir + "/{:}.psaia"
+    id_format = work_dir + "/{:}.cpkl"
+    chains, chain_fasta_filenames, id_filenames = sequ.pdb_to_fasta(
+        pdb_filename, psaia_format, id_format, True)
+
+    protrusion_indices = []
+    for chain, pdb_filename, id_filename in \
+            zip(chains, pdb_filename, id_filenames):
+        basename = os.path.splitext(pdb_filename)[0]
+        protrusion_index_filename = "{}.psaia".format(basename)
+        if not os.path.exists(protrusion_index_filename):
+            logging.info("PSAIA'ing {:}".format(pdb_filename))
+            _psaia(pdb_filename, protrusion_index_filename, output_filename)
+
+        if not os.path.exists(protrusion_index_filename):
+            logging.warning("No hits for {:}".format(pdb_filename))
+            # Create empty file.
+            open(protrusion_index_filename, 'w').close()
+
+        if os.stat(protrusion_index_filename).st_size != 0:
+            protrusion_indices = pd.read_csv(
+                protrusion_index_filename, skiprows=2, skipfooter=6, delim_whitespace=True,
+                engine='python', usecols=range(20), index_col=[0, 1])
+            protrusion_indices = protrusion_indices.reset_index()
+            del protrusion_indices['level_0']
+            protrusion_indices.rename(columns={'level_1': 'orig'}, inplace=True)
+            del protrusion_indices['orig']
+
+        else:
+            logging.warning("No protrusion index found for {:} (model {:}, chain {:})"
+                            .format(pdb_name, chain[-2], chain[-1]))
+            protrusion_indices = None
+
+        pdb_name = db.get_pdb_name(pdb_filename)
+        key = pdb_name + '-' + chain[-2] + '-' + chain[-1]
+        pos_to_res = pickle.load(open(id_filename))[key]
+
+        protrusion_indices['pdb_name'] = db.get_pdb_name(pdb_filename)
+        protrusion_indices['model'] = chain[0]
+        protrusion_indices['chain'] = chain[1]
+        protrusion_indices['residue'] = pos_to_res
+        protrusion_indices.append(protrusion_indices)
+    protrusion_indices = pd.concat(protrusion_indices)
+    return protrusion_indices
+
+
 def gen_pssm(pdb_filename, blastdb, output_filename):
     """Generate PSSM and PSFM from sequence."""
     pdb_name = db.get_pdb_name(pdb_filename)
@@ -116,6 +170,28 @@ def gen_pssm(pdb_filename, blastdb, output_filename):
     return pssms
 
 
+def map_protrusion_indices(pdb_filename, output_filename):
+    pdb_name = db.get_pdb_name(pdb_filename)
+    start_time = timeit.default_timer()
+    start_time_blasting = timeit.default_timer()
+    pis = gen_protrusion_index(pdb_filename, output_filename)
+    num_chains = len(pis.groupby(['pdb_name', 'model', 'chain']))
+    elapsed_blasting = timeit.default_timer() - start_time_blasting
+
+    parsed = pd.read_pickle(pdb_filename)
+    parsed = parsed.merge(
+        pis, on=['model', 'pdb_name', 'chain', 'residue'])
+
+    start_time_writing = timeit.default_timer()
+    parsed.to_pickle(output_filename)
+    elapsed_writing = timeit.default_timer() - start_time_writing
+
+    elapsed = timeit.default_timer() - start_time
+    logging.info(('For {:d} pssms generated from {} spent {:05.2f} blasting,'
+                  ' {:05.2f} writing, and {:05.2f} overall.').format(num_chains, pdb_name, elapsed_blasting,
+                                                                     elapsed_writing, elapsed))
+
+
 def map_pssms(pdb_filename, blastdb, output_filename):
     pdb_name = db.get_pdb_name(pdb_filename)
     start_time = timeit.default_timer()
@@ -136,6 +212,21 @@ def map_pssms(pdb_filename, blastdb, output_filename):
     logging.info(('For {:d} pssms generated from {} spent {:05.2f} blasting,'
                   ' {:05.2f} writing, and {:05.2f} overall.').format(num_chains, pdb_name, elapsed_blasting,
                                                                      elapsed_writing, elapsed))
+
+
+def _psaia(query, output_protrusion_index, output):
+    """Run PSAIA on specified input."""
+    psaia_command = "psaia -query {:} -out_ascii_protrusion_index {:} -out {:}"
+    log_out = "{}.out".format(output)
+    log_err = "{}.err".format(output)
+    with open(log_out, 'a') as f_out:
+        with open(log_err, 'a') as f_err:
+            command = psaia_command.format(query, output_protrusion_index, output)
+            f_out.write('=================== CALL ===================\n')
+            f_out.write(command + '\n')
+            subprocess.check_call(
+                command, shell=True, stderr=f_err, stdout=f_out)
+            f_out.write('================= END CALL =================\n')
 
 
 def _blast(query, output_pssm, output, blastdb):
@@ -183,6 +274,33 @@ def _al2co(clustal_in, al2co_out):
             subprocess.check_call(
                 command, shell=True, stderr=f_err, stdout=f_out)
             f_out.write('================= END CALL =================\n')
+
+
+def map_all_protrusion_indices(pdb_dataset, output_dir, num_cpus):
+    ext = '.pkl'
+    requested_filenames = \
+        db.get_structures_filenames(pdb_dataset, extension=ext)
+    requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
+    produced_filenames = db.get_structures_filenames(
+        output_dir, extension='.pkl')
+    produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
+    work_keys = [key for key in requested_keys if key not in produced_keys]
+    work_filenames = [x[0] for x in db.get_all_filenames(work_keys, pdb_dataset, extension=ext,
+                                                         keyer=lambda x: db.get_pdb_name(x))]
+
+    output_filenames = []
+    for pdb_filename in work_filenames:
+        sub_dir = output_dir + '/' + db.get_pdb_code(pdb_filename)[1:3]
+        if not os.path.exists(sub_dir):
+            os.makedirs(sub_dir)
+        output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + ".pkl")
+
+    logging.info("{:} requested keys, {:} produced keys, {:} work keys"
+                 .format(len(requested_keys), len(produced_keys),
+                         len(work_keys)))
+    inputs = [(key, output)
+              for key, output in zip(work_filenames, output_filenames)]
+    par.submit_jobs(map_protrusion_indices, inputs, num_cpus)
 
 
 def map_all_pssms(pdb_dataset, blastdb, output_dir, num_cpus):
