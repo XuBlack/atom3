@@ -10,6 +10,7 @@ import parallel as par
 
 import atom3.database as db
 import atom3.sequence as sequ
+from atom3.structure import get_chain_to_valid_residues
 
 
 def add_conservation_parser(subparsers, pp):
@@ -34,7 +35,6 @@ def add_conservation_parser(subparsers, pp):
                          ' number processors available on current machine)')
 
 
-# TODO: Test generation of protrusion indices
 def gen_protrusion_index(pdb_filename, output_filename):
     """Generate protrusion index from structure."""
     pdb_name = db.get_pdb_name(pdb_filename)
@@ -42,22 +42,21 @@ def gen_protrusion_index(pdb_filename, output_filename):
     work_dir = os.path.join(out_dir, 'work')
     if not os.path.exists(work_dir):
         os.makedirs(work_dir)
-    psaia_format = work_dir + "/{:}.psaia"
-    id_format = work_dir + "/{:}.cpkl"
-    chains, chain_fasta_filenames, id_filenames = sequ.pdb_to_fasta(
-        pdb_filename, psaia_format, id_format, True)
+    structure = pd.read_pickle(pdb_filename)
+    chains = [chain_res_tuple[0][1] for chain_res_tuple in get_chain_to_valid_residues(structure)]
+    pdb_names = [pdb_name for _ in range(len(chains))]
 
     protrusion_indices = []
-    for chain, pdb_filename, id_filename in \
-            zip(chains, pdb_filename, id_filenames):
-        basename = os.path.splitext(pdb_filename)[0]
+    for chain, pdb_name in zip(chains, pdb_names):
+        basename = os.path.splitext(pdb_name)[0]
         protrusion_index_filename = "{}.psaia".format(basename)
+        output = os.path.join(work_dir, basename)
         if not os.path.exists(protrusion_index_filename):
-            logging.info("PSAIA'ing {:}".format(pdb_filename))
-            _psaia(pdb_filename, protrusion_index_filename, output_filename)
+            logging.info("PSAIA'ing {:}".format(pdb_name))
+            _psaia(pdb_name, protrusion_index_filename, output)
 
         if not os.path.exists(protrusion_index_filename):
-            logging.warning("No hits for {:}".format(pdb_filename))
+            logging.warning("No hits for {:}".format(pdb_name))
             # Create empty file.
             open(protrusion_index_filename, 'w').close()
 
@@ -75,14 +74,9 @@ def gen_protrusion_index(pdb_filename, output_filename):
                             .format(pdb_name, chain[-2], chain[-1]))
             protrusion_indices = None
 
-        pdb_name = db.get_pdb_name(pdb_filename)
-        key = pdb_name + '-' + chain[-2] + '-' + chain[-1]
-        pos_to_res = pickle.load(open(id_filename))[key]
-
         protrusion_indices['pdb_name'] = db.get_pdb_name(pdb_filename)
         protrusion_indices['model'] = chain[0]
         protrusion_indices['chain'] = chain[1]
-        protrusion_indices['residue'] = pos_to_res
         protrusion_indices.append(protrusion_indices)
     protrusion_indices = pd.concat(protrusion_indices)
     return protrusion_indices
@@ -216,16 +210,15 @@ def map_pssms(pdb_filename, blastdb, output_filename):
 
 def _psaia(query, output_protrusion_index, output):
     """Run PSAIA on specified input."""
-    psaia_command = "psaia -query {:} -out_ascii_protrusion_index {:} -out {:}"
+    psaia_command = "psa {:} {:}"  # PSA is the CLI for PSAIA (the GUI)
     log_out = "{}.out".format(output)
     log_err = "{}.err".format(output)
     with open(log_out, 'a') as f_out:
         with open(log_err, 'a') as f_err:
-            command = psaia_command.format(query, output_protrusion_index, output)
+            command = psaia_command.format(query, output + '.psaia', output_protrusion_index)
             f_out.write('=================== CALL ===================\n')
             f_out.write(command + '\n')
-            subprocess.check_call(
-                command, shell=True, stderr=f_err, stdout=f_out)
+            subprocess.check_call(command, shell=True, stderr=f_err, stdout=f_out)
             f_out.write('================= END CALL =================\n')
 
 
@@ -237,12 +230,10 @@ def _blast(query, output_pssm, output, blastdb):
     log_err = "{}.err".format(output)
     with open(log_out, 'a') as f_out:
         with open(log_err, 'a') as f_err:
-            command = psiblast_command.format(
-                blastdb, query, output_pssm, output)
+            command = psiblast_command.format(blastdb, query, output_pssm, output)
             f_out.write('=================== CALL ===================\n')
             f_out.write(command + '\n')
-            subprocess.check_call(
-                command, shell=True, stderr=f_err, stdout=f_out)
+            subprocess.check_call(command, shell=True, stderr=f_err, stdout=f_out)
             f_out.write('================= END CALL =================\n')
 
 
@@ -256,8 +247,7 @@ def _to_clustal(psiblast_in, clustal_out):
             command = mview_command.format(psiblast_in, clustal_out)
             f_out.write('=================== CALL ===================\n')
             f_out.write(command + '\n')
-            subprocess.check_call(
-                command, shell=True, stderr=f_err, stdout=f_out)
+            subprocess.check_call(command, shell=True, stderr=f_err, stdout=f_out)
             f_out.write('================= END CALL =================\n')
 
 
@@ -271,8 +261,7 @@ def _al2co(clustal_in, al2co_out):
             command = al2co_command.format(clustal_in, al2co_out)
             f_out.write('=================== CALL ===================\n')
             f_out.write(command + '\n')
-            subprocess.check_call(
-                command, shell=True, stderr=f_err, stdout=f_out)
+            subprocess.check_call(command, shell=True, stderr=f_err, stdout=f_out)
             f_out.write('================= END CALL =================\n')
 
 
@@ -295,11 +284,9 @@ def map_all_protrusion_indices(pdb_dataset, output_dir, num_cpus):
             os.makedirs(sub_dir)
         output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + ".pkl")
 
-    logging.info("{:} requested keys, {:} produced keys, {:} work keys"
-                 .format(len(requested_keys), len(produced_keys),
-                         len(work_keys)))
-    inputs = [(key, output)
-              for key, output in zip(work_filenames, output_filenames)]
+    logging.info("{:} requested keys, {:} produced keys, {:} work keys".format(len(requested_keys),
+                                                                               len(produced_keys), len(work_keys)))
+    inputs = [(key, output) for key, output in zip(work_filenames, output_filenames)]
     par.submit_jobs(map_protrusion_indices, inputs, num_cpus)
 
 

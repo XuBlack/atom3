@@ -31,6 +31,8 @@ def add_pairs_parser(subparsers, pp):
         help='uses output of the complex command to split pickled proteins',
         parents=[pp])
     ap.set_defaults(func=all_complexes_to_pairs_main)
+    ap.add_argument('nbd', metavar='neighbor_def', type=str,
+                    help='neighbor definition (i.e. non_heavy_res, non_heavy_atom, ca_res, or ca_atom)')
     ap.add_argument('complexes_dill', metavar='complexes.dill', type=str,
                     help='complexes file')
     ap.add_argument('output_dir', type=str,
@@ -56,8 +58,7 @@ def add_pairs_parser(subparsers, pp):
 def all_complexes_to_pairs_full(args):
     complexes = comp.read_complexes(args.complexes_dill)
     get_neighbors = nb.build_get_neighbors(args.criteria, args.cutoff)
-    get_pairs = build_get_pairs(complexes['type'], args.unbound, get_neighbors,
-                                args.full)
+    get_pairs = build_get_pairs(args.nbd, complexes['type'], args.unbound, get_neighbors, args.full)
     all_complex_to_pairs(complexes, get_pairs, args.output_dir, args.c)
 
 
@@ -222,7 +223,7 @@ def _get_db5_pairs(complex, unbound, nb_fn, full):
     rpos = get_ca_pos_from_residues(rdf, rres)
     pos_idx, neg_idx = _get_residue_positions(ldf, lpos, rdf, rpos, full)
     srcs = {'src0': lsrc, 'src1': rsrc}
-    pair = Pair(complex=complex.name, df0=ldf, df1=rdf, pos_idx=pos_idx, neg_idx=neg_idx, srcs=srcs, id=0)
+    pair = Pair(complex=complex.name, df0=ldf, df1=rdf, pos_idx=pos_idx, neg_idx=neg_idx, srcs=srcs, id=0, sequences=[])
     return [pair], 2
 
 
@@ -260,8 +261,8 @@ def _get_all_chain_pairs(neighbor_def, complex, df, nb_fn, filename, full):
                 pos1 = get_ca_pos_from_residues(df1, res1)
                 pos_idx, neg_idx = _get_residue_positions(df0, pos0, df1, pos1, full)
             srcs = {'src0': filename, 'src1': filename}
-            pair = Pair(complex=complex.name, df0=df0, df1=df1,
-                        pos_idx=pos_idx, neg_idx=neg_idx, srcs=srcs, id=pair_idx)
+            pair = Pair(complex=complex.name, df0=df0, df1=df1, pos_idx=pos_idx,
+                        neg_idx=neg_idx, srcs=srcs, id=pair_idx, sequences=[])
             pairs.append(pair)
             pair_idx += 1
     return pairs, num_chains
