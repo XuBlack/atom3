@@ -223,7 +223,7 @@ def _get_db5_pairs(complex, unbound, nb_fn, full):
     rpos = get_ca_pos_from_residues(rdf, rres)
     pos_idx, neg_idx = _get_residue_positions(ldf, lpos, rdf, rpos, full)
     srcs = {'src0': lsrc, 'src1': rsrc}
-    pair = Pair(complex=complex.name, df0=ldf, df1=rdf, pos_idx=pos_idx, neg_idx=neg_idx, srcs=srcs, id=0, sequences=[])
+    pair = Pair(complex=complex.name, df0=ldf, df1=rdf, pos_idx=pos_idx, neg_idx=neg_idx, srcs=srcs, id=0, sequences={})
     return [pair], 2
 
 
@@ -262,7 +262,7 @@ def _get_all_chain_pairs(neighbor_def, complex, df, nb_fn, filename, full):
                 pos_idx, neg_idx = _get_residue_positions(df0, pos0, df1, pos1, full)
             srcs = {'src0': filename, 'src1': filename}
             pair = Pair(complex=complex.name, df0=df0, df1=df1, pos_idx=pos_idx,
-                        neg_idx=neg_idx, srcs=srcs, id=pair_idx, sequences=[])
+                        neg_idx=neg_idx, srcs=srcs, id=pair_idx, sequences={})
             pairs.append(pair)
             pair_idx += 1
     return pairs, num_chains
