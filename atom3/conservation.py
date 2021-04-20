@@ -112,7 +112,7 @@ def gen_pssm(pdb_filename, blastdb, output_filename):
 
         pdb_name = db.get_pdb_name(pdb_filename)
         key = pdb_name + '-' + chain[-2] + '-' + chain[-1]
-        pos_to_res = pickle.load(open(id_filename))[key]
+        pos_to_res = pickle.load(open(id_filename, 'rb'))[key]
 
         pssm['pdb_name'] = db.get_pdb_name(pdb_filename)
         pssm['model'] = chain[0]
