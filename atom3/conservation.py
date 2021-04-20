@@ -4,13 +4,13 @@ import os
 import pickle
 import subprocess
 import timeit
+from pathlib import Path
 
 import pandas as pd
 import parallel as par
 
 import atom3.database as db
 import atom3.sequence as sequ
-from atom3.structure import get_chain_to_valid_residues
 
 
 def add_conservation_parser(subparsers, pp):
@@ -35,51 +35,10 @@ def add_conservation_parser(subparsers, pp):
                          ' number processors available on current machine)')
 
 
-def gen_protrusion_index(pdb_filename, output_filename):
-    """Generate protrusion index from structure."""
-    pdb_name = db.get_pdb_name(pdb_filename)
-    out_dir = os.path.dirname(output_filename)
-    work_dir = os.path.join(out_dir, 'work')
-    if not os.path.exists(work_dir):
-        os.makedirs(work_dir)
-    structure = pd.read_pickle(pdb_filename)
-    chains = [chain_res_tuple[0][1] for chain_res_tuple in get_chain_to_valid_residues(structure)]
-    pdb_names = [pdb_name for _ in range(len(chains))]
-
-    protrusion_indices = []
-    for chain, pdb_name in zip(chains, pdb_names):
-        basename = os.path.splitext(pdb_name)[0]
-        protrusion_index_filename = "{}.psaia".format(basename)
-        output = os.path.join(work_dir, basename)
-        if not os.path.exists(protrusion_index_filename):
-            logging.info("PSAIA'ing {:}".format(pdb_name))
-            _psaia(pdb_name, protrusion_index_filename, output)
-
-        if not os.path.exists(protrusion_index_filename):
-            logging.warning("No hits for {:}".format(pdb_name))
-            # Create empty file.
-            open(protrusion_index_filename, 'w').close()
-
-        if os.stat(protrusion_index_filename).st_size != 0:
-            protrusion_indices = pd.read_csv(
-                protrusion_index_filename, skiprows=2, skipfooter=6, delim_whitespace=True,
-                engine='python', usecols=range(20), index_col=[0, 1])
-            protrusion_indices = protrusion_indices.reset_index()
-            del protrusion_indices['level_0']
-            protrusion_indices.rename(columns={'level_1': 'orig'}, inplace=True)
-            del protrusion_indices['orig']
-
-        else:
-            logging.warning("No protrusion index found for {:} (model {:}, chain {:})"
-                            .format(pdb_name, chain[-2], chain[-1]))
-            protrusion_indices = None
-
-        protrusion_indices['pdb_name'] = db.get_pdb_name(pdb_filename)
-        protrusion_indices['model'] = chain[0]
-        protrusion_indices['chain'] = chain[1]
-        protrusion_indices.append(protrusion_indices)
-    protrusion_indices = pd.concat(protrusion_indices)
-    return protrusion_indices
+def gen_protrusion_index(psaia_config_file, file_list_file):
+    """Generate protrusion index for file list of PDB structures."""
+    logging.info("PSAIA'ing {:}".format(file_list_file))
+    _psaia(psaia_config_file, file_list_file)
 
 
 def gen_pssm(pdb_filename, blastdb, output_filename):
@@ -164,26 +123,18 @@ def gen_pssm(pdb_filename, blastdb, output_filename):
     return pssms
 
 
-def map_protrusion_indices(pdb_filename, output_filename):
-    pdb_name = db.get_pdb_name(pdb_filename)
+def map_protrusion_indices(psaia_config_file, file_list_file):
     start_time = timeit.default_timer()
     start_time_blasting = timeit.default_timer()
-    pis = gen_protrusion_index(pdb_filename, output_filename)
-    num_chains = len(pis.groupby(['pdb_name', 'model', 'chain']))
-    elapsed_blasting = timeit.default_timer() - start_time_blasting
-
-    parsed = pd.read_pickle(pdb_filename)
-    parsed = parsed.merge(
-        pis, on=['model', 'pdb_name', 'chain', 'residue'])
+    gen_protrusion_index(psaia_config_file, file_list_file)
+    elapsed_psaiaing = timeit.default_timer() - start_time_blasting
 
     start_time_writing = timeit.default_timer()
-    parsed.to_pickle(output_filename)
     elapsed_writing = timeit.default_timer() - start_time_writing
 
     elapsed = timeit.default_timer() - start_time
-    logging.info(('For {:d} pssms generated from {} spent {:05.2f} blasting,'
-                  ' {:05.2f} writing, and {:05.2f} overall.').format(num_chains, pdb_name, elapsed_blasting,
-                                                                     elapsed_writing, elapsed))
+    logging.info(('Protrusion indices\' generation spent {:05.2f} PSAIA\'ing,'
+                  ' {:05.2f} writing, and {:05.2f} overall.').format(elapsed_psaiaing, elapsed_writing, elapsed))
 
 
 def map_pssms(pdb_filename, blastdb, output_filename):
@@ -208,14 +159,14 @@ def map_pssms(pdb_filename, blastdb, output_filename):
                                                                      elapsed_writing, elapsed))
 
 
-def _psaia(query, output_protrusion_index, output):
+def _psaia(psaia_config_file, file_list_file):
     """Run PSAIA on specified input."""
     psaia_command = "psa {:} {:}"  # PSA is the CLI for PSAIA (the GUI)
-    log_out = "{}.out".format(output)
-    log_err = "{}.err".format(output)
+    log_out = "{}.out".format(file_list_file)
+    log_err = "{}.err".format(file_list_file)
     with open(log_out, 'a') as f_out:
         with open(log_err, 'a') as f_err:
-            command = psaia_command.format(query, output + '.psaia', output_protrusion_index)
+            command = psaia_command.format(psaia_config_file, file_list_file)
             f_out.write('=================== CALL ===================\n')
             f_out.write(command + '\n')
             subprocess.check_call(command, shell=True, stderr=f_err, stdout=f_out)
@@ -265,29 +216,18 @@ def _al2co(clustal_in, al2co_out):
             f_out.write('================= END CALL =================\n')
 
 
-def map_all_protrusion_indices(pdb_dataset, output_dir, num_cpus):
-    ext = '.pkl'
-    requested_filenames = \
-        db.get_structures_filenames(pdb_dataset, extension=ext)
-    requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
-    produced_filenames = db.get_structures_filenames(
-        output_dir, extension='.pkl')
-    produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
-    work_keys = [key for key in requested_keys if key not in produced_keys]
-    work_filenames = [x[0] for x in db.get_all_filenames(work_keys, pdb_dataset, extension=ext,
-                                                         keyer=lambda x: db.get_pdb_name(x))]
+def map_all_protrusion_indices(psaia_config_file, pdb_dataset, output_dir, source_type):
+    requested_pdb_filenames = [path.as_posix() for path in Path(pdb_dataset).rglob('*.pdb') if '_u_' in path.as_posix()]
 
-    output_filenames = []
-    for pdb_filename in work_filenames:
-        sub_dir = output_dir + '/' + db.get_pdb_code(pdb_filename)[1:3]
-        if not os.path.exists(sub_dir):
-            os.makedirs(sub_dir)
-        output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + ".pkl")
+    # Create comprehensive filename list for PSAIA to single-threadedly process for requested features (e.g. protrusion)
+    file_list_file = os.path.join(output_dir, 'PSAIA', source_type.upper(), 'pdb_list.fls')
+    with open(file_list_file, 'w') as file:
+        for requested_pdb_filename in requested_pdb_filenames:
+            file.write(f'{requested_pdb_filename}\n')
 
-    logging.info("{:} requested keys, {:} produced keys, {:} work keys".format(len(requested_keys),
-                                                                               len(produced_keys), len(work_keys)))
-    inputs = [(key, output) for key, output in zip(work_filenames, output_filenames)]
-    par.submit_jobs(map_protrusion_indices, inputs, num_cpus)
+    logging.info("{:} PDB files to process with PSAIA".format(len(requested_pdb_filenames)))
+    inputs = [(psaia_config_file, file_list) for file_list in zip(psaia_config_file, file_list_file)]
+    par.submit_jobs(map_protrusion_indices, inputs, 1)  # PSAIA is inherently single-threaded in execution
 
 
 def map_all_pssms(pdb_dataset, blastdb, output_dir, num_cpus):
