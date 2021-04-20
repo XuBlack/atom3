@@ -226,7 +226,7 @@ def map_all_protrusion_indices(psaia_config_file, pdb_dataset, output_dir, sourc
             file.write(f'{requested_pdb_filename}\n')
 
     logging.info("{:} PDB files to process with PSAIA".format(len(requested_pdb_filenames)))
-    inputs = [(psaia_config_file, file_list) for file_list in zip(psaia_config_file, file_list_file)]
+    inputs = [(psaia_config_file, file_list_file)]
     par.submit_jobs(map_protrusion_indices, inputs, 1)  # PSAIA is inherently single-threaded in execution
 
 
