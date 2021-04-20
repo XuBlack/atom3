@@ -161,7 +161,7 @@ def map_pssms(pdb_filename, blastdb, output_filename):
 
 def _psaia(psaia_config_file, file_list_file):
     """Run PSAIA on specified input."""
-    psaia_command = "psa {:} {:}"  # PSA is the CLI for PSAIA (the GUI)
+    psaia_command = "yes y | psa {:} {:}"  # PSA is the CLI for PSAIA (the GUI)
     log_out = "{}.out".format(file_list_file)
     log_err = "{}.err".format(file_list_file)
     with open(log_out, 'a') as f_out:
