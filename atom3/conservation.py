@@ -230,10 +230,12 @@ def map_all_protrusion_indices(psaia_config_file, pdb_dataset, output_dir, sourc
     par.submit_jobs(map_protrusion_indices, inputs, 1)  # PSAIA is inherently single-threaded in execution
 
 
-def map_all_pssms(pdb_dataset, blastdb, output_dir, num_cpus):
+def map_all_pssms(pdb_dataset, blastdb, output_dir, num_cpus, bound_type):
     ext = '.pkl'
     requested_filenames = \
         db.get_structures_filenames(pdb_dataset, extension=ext)
+    # Filter filenames by bound type
+    requested_filenames = [filename for filename in requested_filenames if bound_type in filename]
     requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
     produced_filenames = db.get_structures_filenames(
         output_dir, extension='.pkl')
