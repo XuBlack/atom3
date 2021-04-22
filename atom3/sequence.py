@@ -24,12 +24,12 @@ def write_fasta(seq_dict, fasta_out, id_out=None):
         all_ids[name] = ids
     fasta_dir = os.path.dirname(os.path.abspath(fasta_out))
     if not os.path.exists(fasta_dir):
-        os.makedirs(fasta_dir)
+        os.makedirs(fasta_dir, exist_ok=True)
     Bio.SeqIO.write(records, fasta_out, "fasta")
     if id_out is not None:
         id_dir = os.path.dirname(os.path.abspath(id_out))
         if not os.path.exists(id_dir):
-            os.makedirs(id_dir)
+            os.makedirs(id_dir, exist_ok=True)
         with open(id_out, 'wb') as f:
             pickle.dump(all_ids, f)
 

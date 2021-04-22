@@ -65,7 +65,7 @@ def all_complexes_to_pairs_full(args):
 def all_complex_to_pairs(complexes, get_pairs, output_dir, num_cpus):
     """Reads in structures and produces appropriate pairings."""
     if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
 
     requested_keys = complexes['data'].keys()
     produced_keys = complexes_from_pair_dir(output_dir)
@@ -103,7 +103,7 @@ def complex_to_pairs(complex, get_pairs, output_dir):
     with sem:
         if len(pairs) > 0:
             if not os.path.exists(sub_dir):
-                os.makedirs(sub_dir)
+                os.makedirs(sub_dir, exist_ok=True)
             with open(pairs_txt, 'a') as f:
                 f.write(name + '\n')
 

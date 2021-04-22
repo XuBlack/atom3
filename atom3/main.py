@@ -49,7 +49,7 @@ def main():
     else:
         log_dir = os.path.dirname(args.l)
         if len(log_dir) != 0 and not os.path.exists(log_dir):
-            os.makedirs(log_dir)
+            os.makedirs(log_dir, exist_ok=True)
         logging.basicConfig(filename=args.l,
                             format='%(asctime)s %(levelname)s %(process)d: ' +
                             '%(message)s',

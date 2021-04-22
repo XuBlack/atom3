@@ -47,7 +47,7 @@ def gen_pssm(pdb_filename, blastdb, output_filename):
     out_dir = os.path.dirname(output_filename)
     work_dir = os.path.join(out_dir, 'work')
     if not os.path.exists(work_dir):
-        os.makedirs(work_dir)
+        os.makedirs(work_dir, exist_ok=True)
     fasta_format = work_dir + "/{:}.fa"
     id_format = work_dir + "/{:}.cpkl"
     chains, chain_fasta_filenames, id_filenames = sequ.pdb_to_fasta(
@@ -114,11 +114,12 @@ def gen_pssm(pdb_filename, blastdb, output_filename):
         key = pdb_name + '-' + chain[-2] + '-' + chain[-1]
         pos_to_res = pickle.load(open(id_filename, 'rb'))[key]
 
-        pssm['pdb_name'] = db.get_pdb_name(pdb_filename)
-        pssm['model'] = chain[0]
-        pssm['chain'] = chain[1]
-        pssm['residue'] = pos_to_res
-        pssms.append(pssm)
+        if pssm is not None:  # Skip if PSSM was not found
+            pssm['pdb_name'] = db.get_pdb_name(pdb_filename)
+            pssm['model'] = chain[0]
+            pssm['chain'] = chain[1]
+            pssm['residue'] = pos_to_res
+            pssms.append(pssm)
     pssms = pd.concat(pssms)
     return pssms
 
@@ -248,7 +249,7 @@ def map_all_pssms(pdb_dataset, blastdb, output_dir, num_cpus, bound_type):
     for pdb_filename in work_filenames:
         sub_dir = output_dir + '/' + db.get_pdb_code(pdb_filename)[1:3]
         if not os.path.exists(sub_dir):
-            os.makedirs(sub_dir)
+            os.makedirs(sub_dir, exist_ok=True)
         output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + ".pkl")
 
     logging.info("{:} requested keys, {:} produced keys, {:} work keys"

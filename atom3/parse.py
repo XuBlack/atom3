@@ -48,7 +48,7 @@ def parse_all(pdb_dataset, output_dir, num_cpus):
     for pdb_filename in work_filenames:
         sub_dir = output_dir + '/' + db.get_pdb_code(pdb_filename)[1:3]
         if not os.path.exists(sub_dir):
-            os.makedirs(sub_dir)
+            os.makedirs(sub_dir, exist_ok=True)
         output_filenames.append(
             sub_dir + '/' + db.get_pdb_name(pdb_filename) + ".pkl")
 

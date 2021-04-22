@@ -80,7 +80,7 @@ def write_complexes(complexes, output_dill):
         raise RuntimeError(
             "Complex file {:} already exists!".format(output_dill))
     if not os.path.exists(os.path.dirname(output_dill)):
-        os.makedirs(os.path.dirname(output_dill))
+        os.makedirs(os.path.dirname(output_dill), exist_ok=True)
     with open(output_dill, 'wb') as f:
         dill.dump(complexes, f)
 

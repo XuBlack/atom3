@@ -600,7 +600,7 @@ def _generate_clean_complex(pdb_code, containing_dir, results_dir, style):
         return
 
     if not os.path.exists(results_dir):
-        os.makedirs(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
 
 #    logging.info("Receptor")
     _generate_clean_unbound_bound(ru, rb, results_dir, style)
