@@ -312,13 +312,13 @@ def map_all_protrusion_indices(psaia_config_file, pkl_dataset, pdb_dataset, outp
     # Map parsed .pkl pair filepath back to original .pdb filepath for DB5 and RCSB (e.g. DIPS), respectively
     if source_type.lower() == 'db5':
         requested_pkl_filenames = [os.path.join(pdb_dataset,
-                                                db.get_pdb_code(os.path.split(os.path.splitext(filename)[-2])[-1])[1:3],
-                                                os.path.split(os.path.splitext(filename)[-2])[-1])[:-2]
+                                                db.get_pdb_code(os.path.split(os.path.splitext(filename)[-2])[-1]),
+                                                os.path.split(os.path.splitext(filename)[-2])[-1])
                                    for filename in requested_pkl_filenames]
     else:
         requested_pkl_filenames = [os.path.join(pdb_dataset,
-                                                db.get_pdb_code(os.path.split(os.path.splitext(filename)[-2])[-1]),
-                                                os.path.split(os.path.splitext(filename)[-2])[-1])
+                                                db.get_pdb_code(os.path.split(os.path.splitext(filename)[-2])[-1])[1:3],
+                                                os.path.split(os.path.splitext(filename)[-2])[-1].split('_')[0])
                                    for filename in requested_pkl_filenames]
 
     requested_pdb_filenames = [filename for filename in requested_pkl_filenames
