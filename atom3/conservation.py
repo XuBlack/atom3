@@ -124,6 +124,57 @@ def gen_pssm(pdb_filename, blastdb, output_filename):
     return pssms
 
 
+def gen_profile_hmm(pdb_filename, hhsuite_db, output_filename):
+    """Generate profile HMM from sequence."""
+    pdb_name = db.get_pdb_name(pdb_filename)
+    out_dir = os.path.dirname(output_filename)
+    work_dir = os.path.join(out_dir, 'work')
+    if not os.path.exists(work_dir):
+        os.makedirs(work_dir, exist_ok=True)
+    fasta_format = work_dir + "/{:}.fa"
+    id_format = work_dir + "/{:}.cpkl"
+    chains, chain_fasta_filenames, id_filenames = sequ.pdb_to_fasta(pdb_filename, fasta_format, id_format, True)
+
+    profile_hmms = []
+    for chain, chain_fasta_filename, id_filename in zip(chains, chain_fasta_filenames, id_filenames):
+        basename = os.path.splitext(chain_fasta_filename)[0]
+        profile_hmm_filename = "{}.phmm".format(basename)
+        hhblits_filename = "{}.hhblits".format(basename)
+        if not os.path.exists(profile_hmm_filename):
+            logging.info("HHblits'ing {:}".format(chain_fasta_filename))
+            _blast(chain_fasta_filename, profile_hmm_filename, hhblits_filename, hhsuite_db)
+
+        if not os.path.exists(profile_hmm_filename):
+            logging.warning("No hits for {:}".format(chain_fasta_filename))
+            # Create empty file.
+            open(profile_hmm_filename, 'w').close()
+
+        if os.stat(profile_hmm_filename).st_size != 0:
+            profile_hmm = pd.read_csv(
+                profile_hmm_filename, skiprows=2, skipfooter=6, delim_whitespace=True,
+                engine='python', usecols=range(20), index_col=[0, 1])
+            profile_hmm = profile_hmm.reset_index()
+            del profile_hmm['level_0']
+            profile_hmm.rename(columns={'level_1': 'orig'}, inplace=True)
+        else:
+            logging.warning("No profile HMM found for {:} (model {:}, chain {:})"
+                            .format(pdb_name, chain[-2], chain[-1]))
+            profile_hmm = None
+
+        pdb_name = db.get_pdb_name(pdb_filename)
+        key = pdb_name + '-' + chain[-2] + '-' + chain[-1]
+        pos_to_res = pickle.load(open(id_filename, 'rb'))[key]
+
+        if profile_hmm is not None:  # Skip if profile HMM was not found
+            profile_hmm['pdb_name'] = db.get_pdb_name(pdb_filename)
+            profile_hmm['model'] = chain[0]
+            profile_hmm['chain'] = chain[1]
+            profile_hmm['residue'] = pos_to_res
+            profile_hmms.append(profile_hmm)
+    profile_hmms = pd.concat(profile_hmms)
+    return profile_hmms
+
+
 def map_protrusion_indices(psaia_config_file, file_list_file):
     start_time = timeit.default_timer()
     start_time_blasting = timeit.default_timer()
@@ -160,6 +211,27 @@ def map_pssms(pdb_filename, blastdb, output_filename):
                                                                      elapsed_writing, elapsed))
 
 
+def map_profile_hmms(pdb_filename, hhsuite_db, output_filename):
+    pdb_name = db.get_pdb_name(pdb_filename)
+    start_time = timeit.default_timer()
+    start_time_blasting = timeit.default_timer()
+    pis = gen_profile_hmm(pdb_filename, hhsuite_db, output_filename)
+    num_chains = len(pis.groupby(['pdb_name', 'model', 'chain']))
+    elapsed_blasting = timeit.default_timer() - start_time_blasting
+
+    parsed = pd.read_pickle(pdb_filename)
+    parsed = parsed.merge(pis, on=['model', 'pdb_name', 'chain', 'residue'])
+
+    start_time_writing = timeit.default_timer()
+    parsed.to_pickle(output_filename)
+    elapsed_writing = timeit.default_timer() - start_time_writing
+
+    elapsed = timeit.default_timer() - start_time
+    logging.info(('For {:d} profile HMMs generated from {} spent {:05.2f} blasting,'
+                  ' {:05.2f} writing, and {:05.2f} overall.').format(num_chains, pdb_name, elapsed_blasting,
+                                                                     elapsed_writing, elapsed))
+
+
 def _psaia(psaia_config_file, file_list_file):
     """Run PSAIA on specified input."""
     psaia_command = "yes y | psa {:} {:}"  # PSA is the CLI for PSAIA (the GUI)
@@ -168,6 +240,21 @@ def _psaia(psaia_config_file, file_list_file):
     with open(log_out, 'a') as f_out:
         with open(log_err, 'a') as f_err:
             command = psaia_command.format(psaia_config_file, file_list_file)
+            f_out.write('=================== CALL ===================\n')
+            f_out.write(command + '\n')
+            subprocess.check_call(command, shell=True, stderr=f_err, stdout=f_out)
+            f_out.write('================= END CALL =================\n')
+
+
+def _hhblits(query, output_pssm, output, hhsuite_db):
+    """Run HHblits on specified input."""
+    hhblits_command = "hhblits -db {:} -query {:} -out_ascii_pssm {:} " + \
+                     "-save_pssm_after_last_round -out {:}"
+    log_out = "{}.out".format(output)
+    log_err = "{}.err".format(output)
+    with open(log_out, 'a') as f_out:
+        with open(log_err, 'a') as f_err:
+            command = hhblits_command.format(hhsuite_db, query, output_pssm, output)
             f_out.write('=================== CALL ===================\n')
             f_out.write(command + '\n')
             subprocess.check_call(command, shell=True, stderr=f_err, stdout=f_out)
@@ -259,3 +346,33 @@ def map_all_pssms(pdb_dataset, blastdb, output_dir, num_cpus, source_type):
     inputs = [(key, blastdb, output)
               for key, output in zip(work_filenames, output_filenames)]
     par.submit_jobs(map_pssms, inputs, num_cpus)
+
+
+def map_all_profile_hmms(pdb_dataset, hhsuite_db, output_dir, num_cpus, source_type):
+    ext = '.pkl' if source_type == 'db5' else '.dill'  # Else '.dill' for RCSB/DIPS
+    requested_filenames = \
+        db.get_structures_filenames(pdb_dataset, extension=ext)
+    # Filter DB5 filenames to unbound type
+    requested_filenames = [filename for filename in requested_filenames
+                           if source_type.lower() == 'db5' and '_u_' in filename]
+    requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
+    produced_filenames = db.get_structures_filenames(
+        output_dir, extension='.pkl')
+    produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
+    work_keys = [key for key in requested_keys if key not in produced_keys]
+    work_filenames = [x[0] for x in db.get_all_filenames(work_keys, pdb_dataset, extension=ext,
+                                                         keyer=lambda x: db.get_pdb_name(x))]
+
+    output_filenames = []
+    for pdb_filename in work_filenames:
+        sub_dir = output_dir + '/' + db.get_pdb_code(pdb_filename)[1:3]
+        if not os.path.exists(sub_dir):
+            os.makedirs(sub_dir, exist_ok=True)
+        output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + ".pkl")
+
+    logging.info("{:} requested keys, {:} produced keys, {:} work keys"
+                 .format(len(requested_keys), len(produced_keys),
+                         len(work_keys)))
+    inputs = [(key, hhsuite_db, output)
+              for key, output in zip(work_filenames, output_filenames)]
+    par.submit_jobs(map_profile_hmms, inputs, num_cpus)
