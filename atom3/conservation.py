@@ -319,7 +319,7 @@ def map_all_protrusion_indices(psaia_config_file, pdb_dataset, output_dir, sourc
 
 
 def map_all_pssms(pdb_dataset, blastdb, output_dir, num_cpus, source_type):
-    ext = '.pkl' if source_type == 'db5' else '.dill'  # Else '.dill' for DIPS
+    ext = '.pkl' if source_type == 'db5' else '.dill'  # Else '.dill' for RCSB (e.g. DIPS)
     requested_filenames = \
         db.get_structures_filenames(pdb_dataset, extension=ext)
     # Filter DB5 filenames to unbound type
@@ -349,7 +349,7 @@ def map_all_pssms(pdb_dataset, blastdb, output_dir, num_cpus, source_type):
 
 
 def map_all_profile_hmms(pdb_dataset, hhsuite_db, output_dir, num_cpus, source_type):
-    ext = '.pkl' if source_type == 'db5' else '.dill'  # Else '.dill' for DIPS
+    ext = '.pkl' if source_type == 'db5' else '.dill'  # Else '.dill' for RCSB (e.g. DIPS)
     requested_filenames = \
         db.get_structures_filenames(pdb_dataset, extension=ext)
     # Filter DB5 filenames to unbound type
