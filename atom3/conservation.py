@@ -4,7 +4,6 @@ import os
 import pickle
 import subprocess
 import timeit
-from pathlib import Path
 
 import pandas as pd
 import parallel as par
@@ -17,7 +16,7 @@ def add_conservation_parser(subparsers, pp):
     """Add parser."""
 
     def map_all_pssms_main(args):
-        map_all_pssms(args.pkl_dataset, args.blastdb, args.output_dir, args.c)
+        map_all_pssms(args.pkl_dataset, args.blastdb, args.output_dir, args.c, args.source_type)
 
     ap = subparsers.add_parser(
         'conservation', description='sequence conservation',
@@ -33,6 +32,8 @@ def add_conservation_parser(subparsers, pp):
     ap.add_argument('-c', metavar='cpus', default=mp.cpu_count(), type=int,
                     help='number of cpus to use for processing (default:'
                          ' number processors available on current machine)')
+    ap.add_argument('--source_type', metavar='complex_type', default='rcsb', type=str,
+                    help='whether the source PDBs are for bound or unbound complexes (i.e. RCSB (e.g. DIPS) or DB5 complexes)')
 
 
 def gen_protrusion_index(psaia_config_file, file_list_file):
@@ -249,7 +250,7 @@ def _psaia(psaia_config_file, file_list_file):
 def _hhblits(query, output_pssm, output, hhsuite_db):
     """Run HHblits on specified input."""
     hhblits_command = "hhblits -db {:} -query {:} -out_ascii_pssm {:} " + \
-                     "-save_pssm_after_last_round -out {:}"
+                      "-save_pssm_after_last_round -out {:}"
     log_out = "{}.out".format(output)
     log_err = "{}.err".format(output)
     with open(log_out, 'a') as f_out:
@@ -304,8 +305,25 @@ def _al2co(clustal_in, al2co_out):
             f_out.write('================= END CALL =================\n')
 
 
-def map_all_protrusion_indices(psaia_config_file, pdb_dataset, output_dir, source_type):
-    requested_pdb_filenames = [path.as_posix() for path in Path(pdb_dataset).rglob('*.pdb') if '_u_' in path.as_posix()]
+def map_all_protrusion_indices(psaia_config_file, pkl_dataset, pdb_dataset, output_dir, source_type):
+    ext = '.pkl' if source_type.lower() == 'db5' else '.dill'  # Else '.dill' for RCSB (e.g. DIPS)
+    requested_pkl_filenames = db.get_structures_filenames(pkl_dataset, extension=ext)
+
+    # Map parsed .pkl pair filepath back to original .pdb filepath for DB5 and RCSB (e.g. DIPS), respectively
+    if source_type.lower() == 'db5':
+        requested_pkl_filenames = [os.path.join(pdb_dataset,
+                                                db.get_pdb_code(os.path.split(os.path.splitext(filename)[-2])[-1])[1:3],
+                                                os.path.split(os.path.splitext(filename)[-2])[-1])[:-2]
+                                   for filename in requested_pkl_filenames]
+    else:
+        requested_pkl_filenames = [os.path.join(pdb_dataset,
+                                                db.get_pdb_code(os.path.split(os.path.splitext(filename)[-2])[-1]),
+                                                os.path.split(os.path.splitext(filename)[-2])[-1])
+                                   for filename in requested_pkl_filenames]
+
+    requested_pdb_filenames = [filename for filename in requested_pkl_filenames
+                               if (source_type.lower() == 'db5' and '_u_' in filename)
+                               or (source_type.lower() == 'rcsb')]
 
     # Create comprehensive filename list for PSAIA to single-threadedly process for requested features (e.g. protrusion)
     file_list_file = os.path.join(output_dir, 'PSAIA', source_type.upper(), 'pdb_list.fls')
@@ -319,12 +337,13 @@ def map_all_protrusion_indices(psaia_config_file, pdb_dataset, output_dir, sourc
 
 
 def map_all_pssms(pdb_dataset, blastdb, output_dir, num_cpus, source_type):
-    ext = '.pkl' if source_type == 'db5' else '.dill'  # Else '.dill' for RCSB (e.g. DIPS)
+    ext = '.pkl' if source_type.lower() == 'db5' else '.dill'  # Else '.dill' for RCSB (e.g. DIPS)
     requested_filenames = \
         db.get_structures_filenames(pdb_dataset, extension=ext)
     # Filter DB5 filenames to unbound type
     requested_filenames = [filename for filename in requested_filenames
-                           if source_type.lower() == 'db5' and '_u_' in filename]
+                           if (source_type.lower() == 'db5' and '_u_' in filename)
+                           or (source_type.lower() == 'rcsb')]
     requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
     produced_filenames = db.get_structures_filenames(
         output_dir, extension='.pkl')
@@ -349,12 +368,13 @@ def map_all_pssms(pdb_dataset, blastdb, output_dir, num_cpus, source_type):
 
 
 def map_all_profile_hmms(pdb_dataset, hhsuite_db, output_dir, num_cpus, source_type):
-    ext = '.pkl' if source_type == 'db5' else '.dill'  # Else '.dill' for RCSB (e.g. DIPS)
+    ext = '.pkl' if source_type.lower() == 'db5' else '.dill'  # Else '.dill' for RCSB (e.g. DIPS)
     requested_filenames = \
         db.get_structures_filenames(pdb_dataset, extension=ext)
     # Filter DB5 filenames to unbound type
     requested_filenames = [filename for filename in requested_filenames
-                           if source_type.lower() == 'db5' and '_u_' in filename]
+                           if (source_type.lower() == 'db5' and '_u_' in filename)
+                           or (source_type.lower() == 'rcsb')]
     requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
     produced_filenames = db.get_structures_filenames(
         output_dir, extension='.pkl')
