@@ -4,6 +4,7 @@ import os
 import pickle
 import subprocess
 import timeit
+from pathlib import Path
 
 import pandas as pd
 import parallel as par
@@ -308,18 +309,21 @@ def _al2co(clustal_in, al2co_out):
 def map_all_protrusion_indices(psaia_config_file, pkl_dataset, pdb_dataset, output_dir, source_type):
     ext = '.pkl' if source_type.lower() == 'db5' else '.dill'  # Else '.dill' for RCSB (e.g. DIPS)
     requested_pkl_filenames = db.get_structures_filenames(pkl_dataset, extension=ext)
+    produced_filename_pdb_codes = [db.get_pdb_code(filepath).upper() for filepath in Path(output_dir).rglob('*.tbl')]
 
     # Map parsed .pkl pair filepath back to original .pdb filepath for DB5 and RCSB (e.g. DIPS), respectively
     if source_type.lower() == 'db5':
         requested_pkl_filenames = [os.path.join(pdb_dataset,
                                                 db.get_pdb_code(os.path.split(os.path.splitext(filename)[-2])[-1]),
                                                 os.path.split(os.path.splitext(filename)[-2])[-1])
-                                   for filename in requested_pkl_filenames]
+                                   for filename in requested_pkl_filenames
+                                   if db.get_pdb_code(filename).upper() not in produced_filename_pdb_codes]
     else:
         requested_pkl_filenames = [os.path.join(pdb_dataset,
                                                 db.get_pdb_code(os.path.split(os.path.splitext(filename)[-2])[-1])[1:3],
                                                 os.path.split(os.path.splitext(filename)[-2])[-1].split('_')[0])
-                                   for filename in requested_pkl_filenames]
+                                   for filename in requested_pkl_filenames
+                                   if db.get_pdb_code(filename).upper() not in produced_filename_pdb_codes]
 
     requested_pdb_filenames = [filename for filename in requested_pkl_filenames
                                if (source_type.lower() == 'db5' and '_u_' in filename)
