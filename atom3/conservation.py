@@ -126,7 +126,7 @@ def gen_pssm(pdb_filename, blastdb, output_filename):
     return pssms
 
 
-def gen_profile_hmm(pdb_filename, hhsuite_db, output_filename):
+def gen_profile_hmm(num_cpus, pdb_filename, output_filename, hhsuite_db, num_iter):
     """Generate profile HMM from sequence."""
     pdb_name = db.get_pdb_name(pdb_filename)
     out_dir = os.path.dirname(output_filename)
@@ -140,11 +140,12 @@ def gen_profile_hmm(pdb_filename, hhsuite_db, output_filename):
     profile_hmms = []
     for chain, chain_fasta_filename, id_filename in zip(chains, chain_fasta_filenames, id_filenames):
         basename = os.path.splitext(chain_fasta_filename)[0]
-        profile_hmm_filename = "{}.phmm".format(basename)
-        hhblits_filename = "{}.hhblits".format(basename)
+        profile_hmm_filename = "{}.hhm".format(basename)
+        hhblits_filename = "{}.a3m".format(basename)
+
         if not os.path.exists(profile_hmm_filename):
             logging.info("HHblits'ing {:}".format(chain_fasta_filename))
-            _blast(chain_fasta_filename, profile_hmm_filename, hhblits_filename, hhsuite_db)
+            _hhsuite(num_cpus, chain_fasta_filename, hhblits_filename, profile_hmm_filename, hhsuite_db, num_iter)
 
         if not os.path.exists(profile_hmm_filename):
             logging.warning("No hits for {:}".format(chain_fasta_filename))
@@ -213,12 +214,12 @@ def map_pssms(pdb_filename, blastdb, output_filename):
                                                                      elapsed_writing, elapsed))
 
 
-def map_profile_hmms(pdb_filename, hhsuite_db, output_filename):
+def map_profile_hmms(num_cpus, pdb_filename, output_filename, hhsuite_db, num_iter):
     pdb_name = db.get_pdb_name(pdb_filename)
     start_time = timeit.default_timer()
     start_time_blasting = timeit.default_timer()
-    pis = gen_profile_hmm(pdb_filename, hhsuite_db, output_filename)
-    num_chains = len(pis.groupby(['pdb_name', 'model', 'chain']))
+    pis = gen_profile_hmm(num_cpus, pdb_filename, output_filename, hhsuite_db, num_iter)
+    num_chains = len(pis)
     elapsed_blasting = timeit.default_timer() - start_time_blasting
 
     parsed = pd.read_pickle(pdb_filename)
@@ -248,15 +249,14 @@ def _psaia(psaia_config_file, file_list_file):
             f_out.write('================= END CALL =================\n')
 
 
-def _hhblits(query, output_pssm, output, hhsuite_db):
-    """Run HHblits on specified input."""
-    hhblits_command = "hhblits -db {:} -query {:} -out_ascii_pssm {:} " + \
-                      "-save_pssm_after_last_round -out {:}"
-    log_out = "{}.out".format(output)
-    log_err = "{}.err".format(output)
+def _hhsuite(num_cpus, query, output_a3m, output_hhm, hhsuite_db, num_iter):
+    """Run HH-suite3 on specified input."""
+    hhsuite_command = "hhblits -cpu {:} -i {:} -d {:} -oa3m {:} -n {} && hhmake -i {:} -o {:}"
+    log_out = "{}.out".format(output_hhm)
+    log_err = "{}.err".format(output_hhm)
     with open(log_out, 'a') as f_out:
         with open(log_err, 'a') as f_err:
-            command = hhblits_command.format(hhsuite_db, query, output_pssm, output)
+            command = hhsuite_command.format(num_cpus, query, hhsuite_db, output_a3m, num_iter, output_a3m, output_hhm)
             f_out.write('=================== CALL ===================\n')
             f_out.write(command + '\n')
             subprocess.check_call(command, shell=True, stderr=f_err, stdout=f_out)
@@ -371,10 +371,10 @@ def map_all_pssms(pdb_dataset, blastdb, output_dir, num_cpus, source_type):
     par.submit_jobs(map_pssms, inputs, num_cpus)
 
 
-def map_all_profile_hmms(pdb_dataset, hhsuite_db, output_dir, num_cpus, source_type):
+def map_all_profile_hmms(pkl_dataset, output_dir, hhsuite_db, num_cpu_jobs, num_cpus_per_job, source_type, num_iter):
     ext = '.pkl' if source_type.lower() == 'db5' else '.dill'  # Else '.dill' for RCSB (e.g. DIPS)
     requested_filenames = \
-        db.get_structures_filenames(pdb_dataset, extension=ext)
+        db.get_structures_filenames(pkl_dataset, extension=ext)
     # Filter DB5 filenames to unbound type
     requested_filenames = [filename for filename in requested_filenames
                            if (source_type.lower() == 'db5' and '_u_' in filename)
@@ -384,7 +384,7 @@ def map_all_profile_hmms(pdb_dataset, hhsuite_db, output_dir, num_cpus, source_t
         output_dir, extension='.pkl')
     produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
     work_keys = [key for key in requested_keys if key not in produced_keys]
-    work_filenames = [x[0] for x in db.get_all_filenames(work_keys, pdb_dataset, extension=ext,
+    work_filenames = [x[0] for x in db.get_all_filenames(work_keys, pkl_dataset, extension=ext,
                                                          keyer=lambda x: db.get_pdb_name(x))]
 
     output_filenames = []
@@ -397,6 +397,6 @@ def map_all_profile_hmms(pdb_dataset, hhsuite_db, output_dir, num_cpus, source_t
     logging.info("{:} requested keys, {:} produced keys, {:} work keys"
                  .format(len(requested_keys), len(produced_keys),
                          len(work_keys)))
-    inputs = [(key, hhsuite_db, output)
-              for key, output in zip(work_filenames, output_filenames)]
-    par.submit_jobs(map_profile_hmms, inputs, num_cpus)
+
+    inputs = [(num_cpus_per_job, key, output, hhsuite_db, num_iter) for key, output in zip(work_filenames, output_filenames)]
+    par.submit_jobs(map_profile_hmms, inputs, num_cpu_jobs)
