@@ -11,6 +11,7 @@ import parallel as par
 
 import atom3.database as db
 import atom3.sequence as sequ
+from atom3.utils import extract_hmm_profile
 
 
 def add_conservation_parser(subparsers, pp):
@@ -126,17 +127,21 @@ def gen_pssm(pdb_filename, blastdb, output_filename):
     return pssms
 
 
-def gen_profile_hmm(num_cpus, pdb_filename, output_filename, hhsuite_db, num_iter):
+def gen_profile_hmm(num_cpus, pkl_filename, output_filename, hhsuite_db, source_type, num_iter):
     """Generate profile HMM from sequence."""
-    pdb_name = db.get_pdb_name(pdb_filename)
+    pdb_name = db.get_pdb_name(pkl_filename)
     out_dir = os.path.dirname(output_filename)
     work_dir = os.path.join(out_dir, 'work')
     if not os.path.exists(work_dir):
         os.makedirs(work_dir, exist_ok=True)
     fasta_format = work_dir + "/{:}.fa"
     id_format = work_dir + "/{:}.cpkl"
-    chains, chain_fasta_filenames, id_filenames = sequ.pdb_to_fasta(pdb_filename, fasta_format, id_format, True)
 
+    # Get FASTA sequence-chain representations of PDB structures
+    chains, chain_fasta_filenames, id_filenames = sequ.pdb_to_fasta(pkl_filename, fasta_format, id_format, True)
+
+    # Process each profile HMM for a given PDB structure or complex
+    num_chains = 0
     profile_hmms = []
     for chain, chain_fasta_filename, id_filename in zip(chains, chain_fasta_filenames, id_filenames):
         basename = os.path.splitext(chain_fasta_filename)[0]
@@ -149,46 +154,50 @@ def gen_profile_hmm(num_cpus, pdb_filename, output_filename, hhsuite_db, num_ite
 
         if not os.path.exists(profile_hmm_filename):
             logging.warning("No hits for {:}".format(chain_fasta_filename))
-            # Create empty file.
+            # Create empty file
             open(profile_hmm_filename, 'w').close()
 
         if os.stat(profile_hmm_filename).st_size != 0:
-            profile_hmm = pd.read_csv(
-                profile_hmm_filename, skiprows=2, skipfooter=6, delim_whitespace=True,
-                engine='python', usecols=range(20), index_col=[0, 1])
-            profile_hmm = profile_hmm.reset_index()
-            del profile_hmm['level_0']
-            profile_hmm.rename(columns={'level_1': 'orig'}, inplace=True)
+            with open(chain_fasta_filename, 'r') as fasta:
+                with open(profile_hmm_filename, 'r') as hmm:
+                    sequence = ''
+                    for seq_line in fasta.readlines()[1:]:
+                        sequence += " ".join(seq_line.splitlines())
+                    profile_hmm = extract_hmm_profile(hmm.read(), sequence)
         else:
             logging.warning("No profile HMM found for {:} (model {:}, chain {:})"
                             .format(pdb_name, chain[-2], chain[-1]))
             profile_hmm = None
 
-        pdb_name = db.get_pdb_name(pdb_filename)
+        pdb_name = db.get_pdb_name(pkl_filename)
         key = pdb_name + '-' + chain[-2] + '-' + chain[-1]
         pos_to_res = pickle.load(open(id_filename, 'rb'))[key]
 
         if profile_hmm is not None:  # Skip if profile HMM was not found
-            profile_hmm['pdb_name'] = db.get_pdb_name(pdb_filename)
-            profile_hmm['model'] = chain[0]
-            profile_hmm['chain'] = chain[1]
-            profile_hmm['residue'] = pos_to_res
+            profile_hmm = pd.DataFrame(data=profile_hmm)
+            profile_hmm.insert(0, 'pdb_name', db.get_pdb_name(pkl_filename))
+            profile_hmm.insert(1, 'model', chain[0])
+            profile_hmm.insert(2, 'chain', chain[1])
+            profile_hmm.insert(3, 'residue', pos_to_res)
             profile_hmms.append(profile_hmm)
+        # Keep track of how many chains have been processed
+        num_chains += 1
+    # Merge related DataFrames into a single one
     profile_hmms = pd.concat(profile_hmms)
-    return profile_hmms
+    return profile_hmms, num_chains
 
 
 def map_protrusion_indices(psaia_config_file, file_list_file):
     start_time = timeit.default_timer()
-    start_time_blasting = timeit.default_timer()
+    start_time_psaiaing = timeit.default_timer()
     gen_protrusion_index(psaia_config_file, file_list_file)
-    elapsed_psaiaing = timeit.default_timer() - start_time_blasting
+    elapsed_psaiaing = timeit.default_timer() - start_time_psaiaing
 
     start_time_writing = timeit.default_timer()
     elapsed_writing = timeit.default_timer() - start_time_writing
 
     elapsed = timeit.default_timer() - start_time
-    logging.info(('Protrusion indices\' generation spent {:05.2f} PSAIA\'ing,'
+    logging.info(('For generating protrusion indices, spent {:05.2f} PSAIA\'ing,'
                   ' {:05.2f} writing, and {:05.2f} overall.').format(elapsed_psaiaing, elapsed_writing, elapsed))
 
 
@@ -201,28 +210,6 @@ def map_pssms(pdb_filename, blastdb, output_filename):
     elapsed_blasting = timeit.default_timer() - start_time_blasting
 
     parsed = pd.read_pickle(pdb_filename)
-    parsed = parsed.merge(
-        pis, on=['model', 'pdb_name', 'chain', 'residue'])
-
-    start_time_writing = timeit.default_timer()
-    parsed.to_pickle(output_filename)
-    elapsed_writing = timeit.default_timer() - start_time_writing
-
-    elapsed = timeit.default_timer() - start_time
-    logging.info(('For {:d} pssms generated from {} spent {:05.2f} blasting,'
-                  ' {:05.2f} writing, and {:05.2f} overall.').format(num_chains, pdb_name, elapsed_blasting,
-                                                                     elapsed_writing, elapsed))
-
-
-def map_profile_hmms(num_cpus, pdb_filename, output_filename, hhsuite_db, num_iter):
-    pdb_name = db.get_pdb_name(pdb_filename)
-    start_time = timeit.default_timer()
-    start_time_blasting = timeit.default_timer()
-    pis = gen_profile_hmm(num_cpus, pdb_filename, output_filename, hhsuite_db, num_iter)
-    num_chains = len(pis)
-    elapsed_blasting = timeit.default_timer() - start_time_blasting
-
-    parsed = pd.read_pickle(pdb_filename)
     parsed = parsed.merge(pis, on=['model', 'pdb_name', 'chain', 'residue'])
 
     start_time_writing = timeit.default_timer()
@@ -230,8 +217,26 @@ def map_profile_hmms(num_cpus, pdb_filename, output_filename, hhsuite_db, num_it
     elapsed_writing = timeit.default_timer() - start_time_writing
 
     elapsed = timeit.default_timer() - start_time
-    logging.info(('For {:d} profile HMMs generated from {} spent {:05.2f} blasting,'
+    logging.info(('For {:d} pssms generated from {}, spent {:05.2f} blasting,'
                   ' {:05.2f} writing, and {:05.2f} overall.').format(num_chains, pdb_name, elapsed_blasting,
+                                                                     elapsed_writing, elapsed))
+
+
+def map_profile_hmms(num_cpus, pkl_filename, output_filename, hhsuite_db, source_type, num_iter):
+    pdb_name = db.get_pdb_name(pkl_filename)
+    start_time = timeit.default_timer()
+    start_time_blitsing = timeit.default_timer()
+    profile_hmms, num_chains = gen_profile_hmm(num_cpus, pkl_filename, output_filename,
+                                               hhsuite_db, source_type, num_iter)
+    elapsed_blitsing = timeit.default_timer() - start_time_blitsing
+
+    start_time_writing = timeit.default_timer()
+    profile_hmms.to_pickle(output_filename)
+    elapsed_writing = timeit.default_timer() - start_time_writing
+
+    elapsed = timeit.default_timer() - start_time
+    logging.info(('For {:d} profile HMMs generated from {}, spent {:05.2f} blitsing,'
+                  ' {:05.2f} writing, and {:05.2f} overall.').format(num_chains, pdb_name, elapsed_blitsing,
                                                                      elapsed_writing, elapsed))
 
 
@@ -307,9 +312,13 @@ def _al2co(clustal_in, al2co_out):
 
 
 def map_all_protrusion_indices(psaia_config_file, pkl_dataset, pdb_dataset, output_dir, source_type):
-    ext = '.pkl' if source_type.lower() == 'db5' else '.dill'  # Else '.dill' for RCSB (e.g. DIPS)
+    ext = '.pkl'
+    pruned_dir = 'pairs-pruned'
     requested_pkl_filenames = db.get_structures_filenames(pkl_dataset, extension=ext)
-    produced_filename_pdb_codes = [db.get_pdb_code(filepath).upper() for filepath in Path(output_dir).rglob('*.tbl')]
+    processed_pdb_codes = [db.get_pdb_code(filepath).upper() for filepath in Path(output_dir).rglob('*.tbl')]
+    pruned_dir_filepath = os.path.join(os.path.sep, *pkl_dataset.split(os.path.sep)[:-1], pruned_dir)
+    pruned_pdb_codes = [db.get_pdb_code(filename.as_posix()).upper() for filename in
+                        Path(pruned_dir_filepath).rglob('*.dill')]
 
     # Map parsed .pkl pair filepath back to original .pdb filepath for DB5 and RCSB (e.g. DIPS), respectively
     if source_type.lower() == 'db5':
@@ -317,13 +326,14 @@ def map_all_protrusion_indices(psaia_config_file, pkl_dataset, pdb_dataset, outp
                                                 db.get_pdb_code(os.path.split(os.path.splitext(filename)[-2])[-1]),
                                                 os.path.split(os.path.splitext(filename)[-2])[-1])
                                    for filename in requested_pkl_filenames
-                                   if db.get_pdb_code(filename).upper() not in produced_filename_pdb_codes]
+                                   if db.get_pdb_code(filename).upper() not in processed_pdb_codes]
     else:
         requested_pkl_filenames = [os.path.join(pdb_dataset,
                                                 db.get_pdb_code(os.path.split(os.path.splitext(filename)[-2])[-1])[1:3],
                                                 os.path.split(os.path.splitext(filename)[-2])[-1].split('_')[0])
                                    for filename in requested_pkl_filenames
-                                   if db.get_pdb_code(filename).upper() not in produced_filename_pdb_codes]
+                                   if db.get_pdb_code(filename).upper() not in processed_pdb_codes
+                                   and db.get_pdb_code(filename).upper() in pruned_pdb_codes]
 
     requested_pdb_filenames = [filename for filename in requested_pkl_filenames
                                if (source_type.lower() == 'db5' and '_u_' in filename)
@@ -340,20 +350,23 @@ def map_all_protrusion_indices(psaia_config_file, pkl_dataset, pdb_dataset, outp
     par.submit_jobs(map_protrusion_indices, inputs, 1)  # PSAIA is inherently single-threaded in execution
 
 
-def map_all_pssms(pdb_dataset, blastdb, output_dir, num_cpus, source_type):
-    ext = '.pkl' if source_type.lower() == 'db5' else '.dill'  # Else '.dill' for RCSB (e.g. DIPS)
-    requested_filenames = \
-        db.get_structures_filenames(pdb_dataset, extension=ext)
+def map_all_pssms(pkl_dataset, blastdb, output_dir, num_cpus, source_type):
+    ext = '.pkl'
+    pruned_dir = 'pairs-pruned'
+    pruned_dir_filepath = os.path.join(os.path.sep, *pkl_dataset.split(os.path.sep)[:-1], pruned_dir)
+    pruned_pdb_codes = [db.get_pdb_code(filename.as_posix()).upper() for filename in
+                        Path(pruned_dir_filepath).rglob('*.dill')]
+    requested_filenames = db.get_structures_filenames(pkl_dataset, extension=ext)
+
     # Filter DB5 filenames to unbound type
     requested_filenames = [filename for filename in requested_filenames
                            if (source_type.lower() == 'db5' and '_u_' in filename)
-                           or (source_type.lower() == 'rcsb')]
+                           or (source_type.lower() == 'rcsb' and db.get_pdb_code(filename).upper() in pruned_pdb_codes)]
     requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
-    produced_filenames = db.get_structures_filenames(
-        output_dir, extension='.pkl')
+    produced_filenames = db.get_structures_filenames(output_dir, extension='.pkl')
     produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
     work_keys = [key for key in requested_keys if key not in produced_keys]
-    work_filenames = [x[0] for x in db.get_all_filenames(work_keys, pdb_dataset, extension=ext,
+    work_filenames = [x[0] for x in db.get_all_filenames(work_keys, pkl_dataset, extension=ext,
                                                          keyer=lambda x: db.get_pdb_name(x))]
 
     output_filenames = []
@@ -372,16 +385,19 @@ def map_all_pssms(pdb_dataset, blastdb, output_dir, num_cpus, source_type):
 
 
 def map_all_profile_hmms(pkl_dataset, output_dir, hhsuite_db, num_cpu_jobs, num_cpus_per_job, source_type, num_iter):
-    ext = '.pkl' if source_type.lower() == 'db5' else '.dill'  # Else '.dill' for RCSB (e.g. DIPS)
-    requested_filenames = \
-        db.get_structures_filenames(pkl_dataset, extension=ext)
-    # Filter DB5 filenames to unbound type
+    ext = '.pkl'
+    pruned_dir = 'pairs-pruned'
+    requested_filenames = db.get_structures_filenames(pkl_dataset, extension=ext)
+    pruned_dir_filepath = os.path.join(os.path.sep, *pkl_dataset.split(os.path.sep)[:-1], pruned_dir)
+    pruned_pdb_codes = [db.get_pdb_code(filename.as_posix()).upper() for filename in
+                        Path(pruned_dir_filepath).rglob('*.dill')]
+
+    # Filter DB5 filenames to unbound type and DIPS complexes to those that were not pruned out previously
     requested_filenames = [filename for filename in requested_filenames
                            if (source_type.lower() == 'db5' and '_u_' in filename)
-                           or (source_type.lower() == 'rcsb')]
+                           or (source_type.lower() == 'rcsb' and db.get_pdb_code(filename).upper() in pruned_pdb_codes)]
     requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
-    produced_filenames = db.get_structures_filenames(
-        output_dir, extension='.pkl')
+    produced_filenames = db.get_structures_filenames(output_dir, extension=ext)
     produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
     work_keys = [key for key in requested_keys if key not in produced_keys]
     work_filenames = [x[0] for x in db.get_all_filenames(work_keys, pkl_dataset, extension=ext,
@@ -392,11 +408,11 @@ def map_all_profile_hmms(pkl_dataset, output_dir, hhsuite_db, num_cpu_jobs, num_
         sub_dir = output_dir + '/' + db.get_pdb_code(pdb_filename)[1:3]
         if not os.path.exists(sub_dir):
             os.makedirs(sub_dir, exist_ok=True)
-        output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + ".pkl")
+        output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + ext)
 
-    logging.info("{:} requested keys, {:} produced keys, {:} work keys"
-                 .format(len(requested_keys), len(produced_keys),
-                         len(work_keys)))
+    logging.info("{:} requested keys, {:} produced keys, {:} work keys".format(len(requested_keys),
+                                                                               len(produced_keys), len(work_keys)))
 
-    inputs = [(num_cpus_per_job, key, output, hhsuite_db, num_iter) for key, output in zip(work_filenames, output_filenames)]
+    inputs = [(num_cpus_per_job, key, output, hhsuite_db, source_type, num_iter) for key, output in
+              zip(work_filenames, output_filenames)]
     par.submit_jobs(map_profile_hmms, inputs, num_cpu_jobs)
