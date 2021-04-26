@@ -418,6 +418,6 @@ def map_all_profile_hmms(pkl_dataset, output_dir, hhsuite_db, num_cpu_jobs,
     logging.info("{:} requested keys, {:} produced keys, {:} work keys".format(len(requested_keys),
                                                                                len(produced_keys), len(work_keys)))
 
-    inputs = [(num_cpus_per_job, key, output, hhsuite_db, source_type, num_iter, rank, size)
+    inputs = [(num_cpus_per_job, key, output, hhsuite_db, source_type, num_iter)
               for key, output in zip(work_filenames, output_filenames)]
     par.submit_jobs(map_profile_hmms, inputs, num_cpu_jobs)
