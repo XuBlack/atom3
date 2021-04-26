@@ -11,7 +11,7 @@ import parallel as par
 
 import atom3.database as db
 import atom3.sequence as sequ
-from atom3.utils import extract_hmm_profile
+from atom3.utils import extract_hmm_profile, slice_list
 
 
 def add_conservation_parser(subparsers, pp):
@@ -384,7 +384,8 @@ def map_all_pssms(pkl_dataset, blastdb, output_dir, num_cpus, source_type):
     par.submit_jobs(map_pssms, inputs, num_cpus)
 
 
-def map_all_profile_hmms(pkl_dataset, output_dir, hhsuite_db, num_cpu_jobs, num_cpus_per_job, source_type, num_iter):
+def map_all_profile_hmms(pkl_dataset, output_dir, hhsuite_db, num_cpu_jobs,
+                         num_cpus_per_job, source_type, num_iter, rank, size):
     ext = '.pkl'
     pruned_dir = 'pairs-pruned'
     requested_filenames = db.get_structures_filenames(pkl_dataset, extension=ext)
@@ -403,6 +404,10 @@ def map_all_profile_hmms(pkl_dataset, output_dir, hhsuite_db, num_cpu_jobs, num_
     work_filenames = [x[0] for x in db.get_all_filenames(work_keys, pkl_dataset, extension=ext,
                                                          keyer=lambda x: db.get_pdb_name(x))]
 
+    # Reserve an equally-sized portion of the full work load for a given rank in the MPI world
+    work_filename_rank_batches = slice_list(work_filenames, 2)
+    work_filenames = work_filename_rank_batches[rank]
+
     output_filenames = []
     for pdb_filename in work_filenames:
         sub_dir = output_dir + '/' + db.get_pdb_code(pdb_filename)[1:3]
@@ -413,6 +418,6 @@ def map_all_profile_hmms(pkl_dataset, output_dir, hhsuite_db, num_cpu_jobs, num_
     logging.info("{:} requested keys, {:} produced keys, {:} work keys".format(len(requested_keys),
                                                                                len(produced_keys), len(work_keys)))
 
-    inputs = [(num_cpus_per_job, key, output, hhsuite_db, source_type, num_iter) for key, output in
-              zip(work_filenames, output_filenames)]
+    inputs = [(num_cpus_per_job, key, output, hhsuite_db, source_type, num_iter, rank, size)
+              for key, output in zip(work_filenames, output_filenames)]
     par.submit_jobs(map_profile_hmms, inputs, num_cpu_jobs)

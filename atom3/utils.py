@@ -34,3 +34,22 @@ def extract_hmm_profile(hhm_file, sequence, asterisks_replace=0.0):
     hmm_profile = np.hstack([aa_profile, gap_profile])
     assert len(hmm_profile) == len(sequence)
     return hmm_profile
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------
+# Following code adapted from Stack Overflow (https://stackoverflow.com/questions/4119070/how-to-divide-a-list-into-n-equal-parts-python):
+# -------------------------------------------------------------------------------------------------------------------------------------
+def slice_list(input_list, size):
+    input_size = len(input_list)
+    slice_size = input_size // size
+    remain = input_size % size
+    result = []
+    iterator = iter(input_list)
+    for i in range(size):
+        result.append([])
+        for j in range(slice_size):
+            result[i].append(iterator.__next__())
+        if remain:
+            result[i].append(iterator.__next__())
+            remain -= 1
+    return result
