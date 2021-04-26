@@ -339,13 +339,19 @@ def map_all_protrusion_indices(psaia_config_file, pkl_dataset, pdb_dataset, outp
                                if (source_type.lower() == 'db5' and '_u_' in filename)
                                or (source_type.lower() == 'rcsb')]
 
+    # Exit early if no inputs need to processed
+    num_inputs = len(requested_pdb_filenames)
+    if num_inputs == 0:
+        logging.info("Exiting early since all provided PDB files have already been processed by PSAIA")
+        exit(0)
+
     # Create comprehensive filename list for PSAIA to single-threadedly process for requested features (e.g. protrusion)
     file_list_file = os.path.join(output_dir, 'PSAIA', source_type.upper(), 'pdb_list.fls')
     with open(file_list_file, 'w') as file:
         for requested_pdb_filename in requested_pdb_filenames:
             file.write(f'{requested_pdb_filename}\n')
 
-    logging.info("{:} PDB files to process with PSAIA".format(len(requested_pdb_filenames)))
+    logging.info("{:} PDB files to process with PSAIA".format(num_inputs))
     inputs = [(psaia_config_file, file_list_file)]
     par.submit_jobs(map_protrusion_indices, inputs, 1)  # PSAIA is inherently single-threaded in execution
 
