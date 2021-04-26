@@ -405,7 +405,7 @@ def map_all_profile_hmms(pkl_dataset, output_dir, hhsuite_db, num_cpu_jobs,
                                                          keyer=lambda x: db.get_pdb_name(x))]
 
     # Reserve an equally-sized portion of the full work load for a given rank in the MPI world
-    work_filename_rank_batches = slice_list(work_filenames, 2)
+    work_filename_rank_batches = slice_list(work_filenames, size)
     work_filenames = work_filename_rank_batches[rank]
 
     output_filenames = []
