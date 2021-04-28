@@ -311,23 +311,34 @@ def _al2co(clustal_in, al2co_out):
             f_out.write('================= END CALL =================\n')
 
 
-def map_all_protrusion_indices(psaia_config_file, pkl_dataset, pdb_dataset, output_dir, source_type):
-    ext = '.dill' if source_type.lower() == 'rcsb' else '.pkl'
-    requested_filenames = db.get_structures_filenames(pkl_dataset, extension=ext)
+def map_all_protrusion_indices(psaia_config_file, pdb_dataset, pkl_dataset, pruned_dataset, output_dir, source_type):
+    ext = '.pkl'
+    if source_type.lower() == 'rcsb':  # Filter out pairs that did not survive pruning previously to reduce complexity
+        pruned_pdb_names = [db.get_pdb_name(filename)
+                            for filename in db.get_structures_filenames(pruned_dataset, extension='.dill')]
+        requested_filenames = [
+            os.path.join(pkl_dataset, db.get_pdb_code(pruned_pdb_name)[1:3], pruned_pdb_name.split('_')[0] + ext)
+            for pruned_pdb_name in pruned_pdb_names
+        ]
+    else:  # DB5 does not employ pair pruning, so there are no pairs to filter
+        requested_filenames = [filename for filename in db.get_structures_filenames(pkl_dataset, extension=ext)]
 
-    # Filter DB5 filenames to unbound type
+    # Filter DB5 filenames to unbound type and get all work filenames
     requested_filenames = [filename for filename in requested_filenames
                            if (source_type.lower() == 'db5' and '_u_' in filename)
                            or (source_type.lower() == 'rcsb')]
     requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
-    produced_filenames = db.get_structures_filenames(output_dir, extension='.tbl')
-    produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
-    work_keys = [key for key in requested_keys if key not in produced_keys]
-
-    # Remove extra identifiers off work_filenames
-    work_filenames = []
-    for x in db.get_all_filenames(work_keys, pdb_dataset, extension=ext, keyer=lambda x: db.get_pdb_name(x)):
-        work_filenames.append(x[0].split('_')[0]) if '_' in x[0] else work_filenames.append(x[0])
+    requested_pdb_codes = [db.get_pdb_code(x) for x in requested_filenames]
+    produced_filenames_path = os.path.join(output_dir, 'PSAIA', 'RCSB' if source_type.lower() == 'rcsb' else 'DB5')
+    produced_filenames = [path.as_posix() for path in Path(produced_filenames_path).rglob('*.tbl')]
+    produced_keys = [db.get_pdb_code(x) for x in produced_filenames]
+    work_keys = [key for key, pdb_code in zip(requested_keys, requested_pdb_codes) if pdb_code not in produced_keys]
+    if source_type.lower() == 'rcsb':
+        work_filenames = [os.path.join(pdb_dataset, db.get_pdb_code(work_key)[1:3], work_key)
+                          for work_key in work_keys]
+    else:
+        work_filenames = [os.path.join(pdb_dataset, db.get_pdb_code(work_key).upper(), work_key)
+                          for work_key in work_keys]
 
     # Exit early if no inputs need to processed
     num_inputs = len(work_filenames)
@@ -346,24 +357,36 @@ def map_all_protrusion_indices(psaia_config_file, pkl_dataset, pdb_dataset, outp
     par.submit_jobs(map_protrusion_indices, inputs, 1)  # PSAIA is inherently single-threaded in execution
 
 
-def map_all_pssms(pkl_dataset, blastdb, output_dir, num_cpus, source_type):
+def map_all_pssms(pkl_dataset, pruned_dataset, blastdb, output_dir, num_cpus, source_type, rank, size):
     ext = '.pkl'
-    pruned_dir = 'pairs-pruned'
-    pruned_dir_filepath = os.path.join(os.path.sep, *pkl_dataset.split(os.path.sep)[:-1], pruned_dir)
-    pruned_pdb_codes = [db.get_pdb_code(filename.as_posix()).upper() for filename in
-                        Path(pruned_dir_filepath).rglob('*.dill')]
-    requested_filenames = db.get_structures_filenames(pkl_dataset, extension=ext)
+    if source_type.lower() == 'rcsb':  # Filter out pairs that did not survive pruning previously to reduce complexity
+        pruned_pdb_names = [db.get_pdb_name(filename)
+                            for filename in db.get_structures_filenames(pruned_dataset, extension='.dill')]
+        requested_filenames = [
+            os.path.join(pkl_dataset, db.get_pdb_code(pruned_pdb_name)[1:3], pruned_pdb_name.split('_')[0] + ext)
+            for pruned_pdb_name in pruned_pdb_names
+        ]
+    else:  # DB5 does not employ pair pruning, so there are no pairs to filter
+        requested_filenames = [filename for filename in db.get_structures_filenames(pkl_dataset, extension=ext)]
 
-    # Filter DB5 filenames to unbound type
+    # Filter DB5 filenames to unbound type and get all work filenames
     requested_filenames = [filename for filename in requested_filenames
                            if (source_type.lower() == 'db5' and '_u_' in filename)
-                           or (source_type.lower() == 'rcsb' and db.get_pdb_code(filename).upper() in pruned_pdb_codes)]
+                           or (source_type.lower() == 'rcsb')]
     requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
     produced_filenames = db.get_structures_filenames(output_dir, extension='.pkl')
     produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
     work_keys = [key for key in requested_keys if key not in produced_keys]
-    work_filenames = [x[0] for x in db.get_all_filenames(work_keys, pkl_dataset, extension=ext,
-                                                         keyer=lambda x: db.get_pdb_name(x))]
+    if source_type.lower() == 'rcsb':
+        work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3], work_key + ext)
+                          for work_key in work_keys]
+    else:
+        work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3].upper(), work_key + ext)
+                          for work_key in work_keys]
+
+    # Reserve an equally-sized portion of the full work load for a given rank in the MPI world
+    work_filename_rank_batches = slice_list(work_filenames, size)
+    work_filenames = work_filename_rank_batches[rank]
 
     output_filenames = []
     for pdb_filename in work_filenames:
@@ -380,12 +403,20 @@ def map_all_pssms(pkl_dataset, blastdb, output_dir, num_cpus, source_type):
     par.submit_jobs(map_pssms, inputs, num_cpus)
 
 
-def map_all_profile_hmms(pkl_dataset, output_dir, hhsuite_db, num_cpu_jobs,
+def map_all_profile_hmms(pkl_dataset, pruned_dataset, output_dir, hhsuite_db, num_cpu_jobs,
                          num_cpus_per_job, source_type, num_iter, rank, size):
-    ext = '.dill' if source_type.lower() == 'rcsb' else '.pkl'
-    requested_filenames = db.get_structures_filenames(pkl_dataset, extension=ext)
+    ext = '.pkl'
+    if source_type.lower() == 'rcsb':  # Filter out pairs that did not survive pruning previously to reduce complexity
+        pruned_pdb_names = [db.get_pdb_name(filename)
+                            for filename in db.get_structures_filenames(pruned_dataset, extension='.dill')]
+        requested_filenames = [
+            os.path.join(pkl_dataset, db.get_pdb_code(pruned_pdb_name)[1:3], pruned_pdb_name.split('_')[0] + ext)
+            for pruned_pdb_name in pruned_pdb_names
+        ]
+    else:  # DB5 does not employ pair pruning, so there are no pairs to filter
+        requested_filenames = [filename for filename in db.get_structures_filenames(pkl_dataset, extension=ext)]
 
-    # Filter DB5 filenames to unbound type and DIPS complexes to those that were not pruned out previously
+    # Filter DB5 filenames to unbound type and get all work filenames
     requested_filenames = [filename for filename in requested_filenames
                            if (source_type.lower() == 'db5' and '_u_' in filename)
                            or (source_type.lower() == 'rcsb')]
@@ -393,8 +424,12 @@ def map_all_profile_hmms(pkl_dataset, output_dir, hhsuite_db, num_cpu_jobs,
     produced_filenames = db.get_structures_filenames(output_dir, extension='.pkl')
     produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
     work_keys = [key for key in requested_keys if key not in produced_keys]
-    work_filenames = [x[0] for x in db.get_all_filenames(work_keys, pkl_dataset, extension=ext,
-                                                         keyer=lambda x: db.get_pdb_name(x))]
+    if source_type.lower() == 'rcsb':
+        work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3], work_key + ext)
+                          for work_key in work_keys]
+    else:
+        work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3].upper(), work_key + ext)
+                          for work_key in work_keys]
 
     # Reserve an equally-sized portion of the full work load for a given rank in the MPI world
     work_filename_rank_batches = slice_list(work_filenames, size)
