@@ -405,7 +405,7 @@ def map_all_profile_hmms(pkl_dataset, output_dir, hhsuite_db, num_cpu_jobs,
         sub_dir = output_dir + '/' + db.get_pdb_code(pdb_filename)[1:3]
         if not os.path.exists(sub_dir):
             os.makedirs(sub_dir, exist_ok=True)
-        output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + ext)
+        output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + '.pkl')
 
     logging.info("{:} requested keys, {:} produced keys, {:} work keys".format(len(requested_keys),
                                                                                len(produced_keys), len(work_keys)))
