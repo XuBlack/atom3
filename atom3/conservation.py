@@ -18,7 +18,8 @@ def add_conservation_parser(subparsers, pp):
     """Add parser."""
 
     def map_all_pssms_main(args):
-        map_all_pssms(args.pkl_dataset, args.blastdb, args.output_dir, args.c, args.source_type)
+        map_all_pssms(args.pkl_dataset, args.pruned_dataset, args.blastdb,
+                      args.output_dir, args.c, args.source_type, args.rank, args.size)
 
     ap = subparsers.add_parser(
         'conservation', description='sequence conservation',
@@ -404,47 +405,59 @@ def map_all_pssms(pkl_dataset, pruned_dataset, blastdb, output_dir, num_cpus, so
 
 
 def map_all_profile_hmms(pkl_dataset, pruned_dataset, output_dir, hhsuite_db, num_cpu_jobs,
-                         num_cpus_per_job, source_type, num_iter, rank, size):
+                         num_cpus_per_job, source_type, num_iter, rank, size, write_file):
     ext = '.pkl'
-    if source_type.lower() == 'rcsb':  # Filter out pairs that did not survive pruning previously to reduce complexity
-        pruned_pdb_names = [db.get_pdb_name(filename)
-                            for filename in db.get_structures_filenames(pruned_dataset, extension='.dill')]
-        requested_filenames = [
-            os.path.join(pkl_dataset, db.get_pdb_code(pruned_pdb_name)[1:3], pruned_pdb_name.split('_')[0] + ext)
-            for pruned_pdb_name in pruned_pdb_names
-        ]
-    else:  # DB5 does not employ pair pruning, so there are no pairs to filter
-        requested_filenames = [filename for filename in db.get_structures_filenames(pkl_dataset, extension=ext)]
+    if write_file:
+        if source_type.lower() == 'rcsb':  # Filter out pairs that did not survive pruning previously to reduce complexity
+            pruned_pdb_names = [db.get_pdb_name(filename)
+                                for filename in db.get_structures_filenames(pruned_dataset, extension='.dill')]
+            requested_filenames = [
+                os.path.join(pkl_dataset, db.get_pdb_code(pruned_pdb_name)[1:3], pruned_pdb_name.split('_')[0] + ext)
+                for pruned_pdb_name in pruned_pdb_names
+            ]
+        else:  # DB5 does not employ pair pruning, so there are no pairs to filter
+            requested_filenames = [filename for filename in db.get_structures_filenames(pkl_dataset, extension=ext)]
 
-    # Filter DB5 filenames to unbound type and get all work filenames
-    requested_filenames = [filename for filename in requested_filenames
-                           if (source_type.lower() == 'db5' and '_u_' in filename)
-                           or (source_type.lower() == 'rcsb')]
-    requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
-    produced_filenames = db.get_structures_filenames(output_dir, extension='.pkl')
-    produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
-    work_keys = [key for key in requested_keys if key not in produced_keys]
-    if source_type.lower() == 'rcsb':
-        work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3], work_key + ext)
-                          for work_key in work_keys]
+        # Filter DB5 filenames to unbound type and get all work filenames
+        requested_filenames = [filename for filename in requested_filenames
+                               if (source_type.lower() == 'db5' and '_u_' in filename)
+                               or (source_type.lower() == 'rcsb')]
+        requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
+        produced_filenames = db.get_structures_filenames(output_dir, extension='.pkl')
+        produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
+        work_keys = [key for key in requested_keys if key not in produced_keys]
+        if source_type.lower() == 'rcsb':
+            work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3], work_key + ext)
+                              for work_key in work_keys]
+        else:
+            work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3].upper(), work_key + ext)
+                              for work_key in work_keys]
+
+        logging.info("{:} requested keys, {:} produced keys, {:} work keys".format(len(requested_keys),
+                                                                                   len(produced_keys), len(work_keys)))
+
+        # Write out a local file containing all work filenames
+        temp_df = pd.DataFrame({'filename': work_filenames})
+        temp_df.to_csv(f'{source_type}_work_filenames.csv')
+        logging.info('File containing work filenames written to storage. Exiting...')
+
+    # Read from previously-created work filenames CSV
     else:
-        work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3].upper(), work_key + ext)
-                          for work_key in work_keys]
+        work_filenames = pd.read_csv(f'{source_type}_work_filenames.csv').iloc[:, 1].to_list()
 
-    # Reserve an equally-sized portion of the full work load for a given rank in the MPI world
-    work_filename_rank_batches = slice_list(work_filenames, size)
-    work_filenames = work_filename_rank_batches[rank]
+        # Reserve an equally-sized portion of the full work load for a given rank in the MPI world
+        work_filename_rank_batches = slice_list(work_filenames, size)
+        work_filenames = work_filename_rank_batches[rank]
 
-    output_filenames = []
-    for pdb_filename in work_filenames:
-        sub_dir = output_dir + '/' + db.get_pdb_code(pdb_filename)[1:3]
-        if not os.path.exists(sub_dir):
-            os.makedirs(sub_dir, exist_ok=True)
-        output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + '.pkl')
+        output_filenames = []
+        for pdb_filename in work_filenames:
+            sub_dir = output_dir + '/' + db.get_pdb_code(pdb_filename)[1:3]
+            if not os.path.exists(sub_dir):
+                os.makedirs(sub_dir, exist_ok=True)
+            output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + '.pkl')
 
-    logging.info("{:} requested keys, {:} produced keys, {:} work keys".format(len(requested_keys),
-                                                                               len(produced_keys), len(work_keys)))
+        logging.info("{:} work filenames".format(len(work_filenames)))
 
-    inputs = [(num_cpus_per_job, key, output, hhsuite_db, source_type, num_iter)
-              for key, output in zip(work_filenames, output_filenames)]
-    par.submit_jobs(map_profile_hmms, inputs, num_cpu_jobs)
+        inputs = [(num_cpus_per_job, key, output, hhsuite_db, source_type, num_iter)
+                  for key, output in zip(work_filenames, output_filenames)]
+        par.submit_jobs(map_profile_hmms, inputs, num_cpu_jobs)
