@@ -312,35 +312,25 @@ def _al2co(clustal_in, al2co_out):
 
 
 def map_all_protrusion_indices(psaia_config_file, pkl_dataset, pdb_dataset, output_dir, source_type):
-    ext = '.pkl'
-    pruned_dir = 'pairs-pruned'
-    requested_pkl_filenames = db.get_structures_filenames(pkl_dataset, extension=ext)
-    processed_pdb_codes = [db.get_pdb_code(filepath).upper() for filepath in Path(output_dir).rglob('*.tbl')]
-    pruned_dir_filepath = os.path.join(os.path.sep, *pkl_dataset.split(os.path.sep)[:-1], pruned_dir)
-    pruned_pdb_codes = [db.get_pdb_code(filename.as_posix()).upper() for filename in
-                        Path(pruned_dir_filepath).rglob('*.dill')]
+    ext = '.dill' if source_type.lower() == 'rcsb' else '.pkl'
+    requested_filenames = db.get_structures_filenames(pkl_dataset, extension=ext)
 
-    # Map parsed .pkl pair filepath back to original .pdb filepath for DB5 and RCSB (e.g. DIPS), respectively
-    if source_type.lower() == 'db5':
-        requested_pkl_filenames = [os.path.join(pdb_dataset,
-                                                db.get_pdb_code(os.path.split(os.path.splitext(filename)[-2])[-1]),
-                                                os.path.split(os.path.splitext(filename)[-2])[-1])
-                                   for filename in requested_pkl_filenames
-                                   if db.get_pdb_code(filename).upper() not in processed_pdb_codes]
-    else:
-        requested_pkl_filenames = [os.path.join(pdb_dataset,
-                                                db.get_pdb_code(os.path.split(os.path.splitext(filename)[-2])[-1])[1:3],
-                                                os.path.split(os.path.splitext(filename)[-2])[-1].split('_')[0])
-                                   for filename in requested_pkl_filenames
-                                   if db.get_pdb_code(filename).upper() not in processed_pdb_codes
-                                   and db.get_pdb_code(filename).upper() in pruned_pdb_codes]
+    # Filter DB5 filenames to unbound type
+    requested_filenames = [filename for filename in requested_filenames
+                           if (source_type.lower() == 'db5' and '_u_' in filename)
+                           or (source_type.lower() == 'rcsb')]
+    requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
+    produced_filenames = db.get_structures_filenames(output_dir, extension='.tbl')
+    produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
+    work_keys = [key for key in requested_keys if key not in produced_keys]
 
-    requested_pdb_filenames = [filename for filename in requested_pkl_filenames
-                               if (source_type.lower() == 'db5' and '_u_' in filename)
-                               or (source_type.lower() == 'rcsb')]
+    # Remove extra identifiers off work_filenames
+    work_filenames = []
+    for x in db.get_all_filenames(work_keys, pdb_dataset, extension=ext, keyer=lambda x: db.get_pdb_name(x)):
+        work_filenames.append(x[0].split('_')[0]) if '_' in x[0] else work_filenames.append(x[0])
 
     # Exit early if no inputs need to processed
-    num_inputs = len(requested_pdb_filenames)
+    num_inputs = len(work_filenames)
     if num_inputs == 0:
         logging.info("Exiting early since all provided PDB files have already been processed by PSAIA")
         exit(0)
@@ -348,7 +338,7 @@ def map_all_protrusion_indices(psaia_config_file, pkl_dataset, pdb_dataset, outp
     # Create comprehensive filename list for PSAIA to single-threadedly process for requested features (e.g. protrusion)
     file_list_file = os.path.join(output_dir, 'PSAIA', source_type.upper(), 'pdb_list.fls')
     with open(file_list_file, 'w') as file:
-        for requested_pdb_filename in requested_pdb_filenames:
+        for requested_pdb_filename in work_filenames:
             file.write(f'{requested_pdb_filename}\n')
 
     logging.info("{:} PDB files to process with PSAIA".format(num_inputs))
@@ -392,19 +382,15 @@ def map_all_pssms(pkl_dataset, blastdb, output_dir, num_cpus, source_type):
 
 def map_all_profile_hmms(pkl_dataset, output_dir, hhsuite_db, num_cpu_jobs,
                          num_cpus_per_job, source_type, num_iter, rank, size):
-    ext = '.pkl'
-    pruned_dir = 'pairs-pruned'
+    ext = '.dill' if source_type.lower() == 'rcsb' else '.pkl'
     requested_filenames = db.get_structures_filenames(pkl_dataset, extension=ext)
-    pruned_dir_filepath = os.path.join(os.path.sep, *pkl_dataset.split(os.path.sep)[:-1], pruned_dir)
-    pruned_pdb_codes = [db.get_pdb_code(filename.as_posix()).upper() for filename in
-                        Path(pruned_dir_filepath).rglob('*.dill')]
 
     # Filter DB5 filenames to unbound type and DIPS complexes to those that were not pruned out previously
     requested_filenames = [filename for filename in requested_filenames
                            if (source_type.lower() == 'db5' and '_u_' in filename)
-                           or (source_type.lower() == 'rcsb' and db.get_pdb_code(filename).upper() in pruned_pdb_codes)]
+                           or (source_type.lower() == 'rcsb')]
     requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
-    produced_filenames = db.get_structures_filenames(output_dir, extension=ext)
+    produced_filenames = db.get_structures_filenames(output_dir, extension='.pkl')
     produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
     work_keys = [key for key in requested_keys if key not in produced_keys]
     work_filenames = [x[0] for x in db.get_all_filenames(work_keys, pkl_dataset, extension=ext,
