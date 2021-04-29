@@ -341,6 +341,9 @@ def map_all_protrusion_indices(psaia_config_file, pdb_dataset, pkl_dataset, prun
         work_filenames = [os.path.join(pdb_dataset, db.get_pdb_code(work_key).upper(), work_key)
                           for work_key in work_keys]
 
+    # Remove any duplicate filenames
+    work_filenames = list(set(work_filenames))
+
     # Exit early if no inputs need to processed
     num_inputs = len(work_filenames)
     if num_inputs == 0:
@@ -384,6 +387,9 @@ def map_all_pssms(pkl_dataset, pruned_dataset, blastdb, output_dir, num_cpus, so
     else:
         work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3].upper(), work_key + ext)
                           for work_key in work_keys]
+
+    # Remove any duplicate filenames
+    work_filenames = list(set(work_filenames))
 
     # Reserve an equally-sized portion of the full work load for a given rank in the MPI world
     work_filename_rank_batches = slice_list(work_filenames, size)
