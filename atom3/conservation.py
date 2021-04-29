@@ -437,6 +437,7 @@ def map_all_profile_hmms(pkl_dataset, pruned_dataset, output_dir, hhsuite_db, nu
                                                                                    len(produced_keys), len(work_keys)))
 
         # Write out a local file containing all work filenames
+        work_filenames = list(set(work_filenames))  # Remove any duplicate filenames
         temp_df = pd.DataFrame({'filename': work_filenames})
         temp_df.to_csv(f'{source_type}_work_filenames.csv')
         logging.info('File containing work filenames written to storage. Exiting...')
@@ -444,6 +445,7 @@ def map_all_profile_hmms(pkl_dataset, pruned_dataset, output_dir, hhsuite_db, nu
     # Read from previously-created work filenames CSV
     else:
         work_filenames = pd.read_csv(f'{source_type}_work_filenames.csv').iloc[:, 1].to_list()
+        work_filenames = list(set(work_filenames))  # Remove any duplicate filenames
 
         # Reserve an equally-sized portion of the full work load for a given rank in the MPI world
         work_filename_rank_batches = slice_list(work_filenames, size)
