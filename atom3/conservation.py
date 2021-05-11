@@ -350,13 +350,14 @@ def map_all_protrusion_indices(psaia_config_file, pdb_dataset, pkl_dataset, prun
         logging.info("Exiting early since all provided PDB files have already been processed by PSAIA")
         exit(0)
 
+    logging.info("{:} PDB files to process with PSAIA".format(num_inputs))
+
     # Create comprehensive filename list for PSAIA to single-threadedly process for requested features (e.g. protrusion)
     file_list_file = os.path.join(output_dir, 'PSAIA', source_type.upper(), 'pdb_list.fls')
     with open(file_list_file, 'w') as file:
         for requested_pdb_filename in work_filenames:
             file.write(f'{requested_pdb_filename}\n')
 
-    logging.info("{:} PDB files to process with PSAIA".format(num_inputs))
     inputs = [(psaia_config_file, file_list_file)]
     par.submit_jobs(map_protrusion_indices, inputs, 1)  # PSAIA is inherently single-threaded in execution
 
@@ -388,12 +389,15 @@ def map_all_pssms(pkl_dataset, pruned_dataset, blastdb, output_dir, num_cpus, so
         work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3].upper(), work_key + ext)
                           for work_key in work_keys]
 
-    # Remove any duplicate filenames
-    work_filenames = list(set(work_filenames))
-
     # Reserve an equally-sized portion of the full work load for a given rank in the MPI world
+    work_filenames = list(set(work_filenames))
     work_filename_rank_batches = slice_list(work_filenames, size)
     work_filenames = work_filename_rank_batches[rank]
+
+    # Remove any duplicate filenames
+    logging.info("{:} requested keys, {:} produced keys, {:} work filenames".format(len(requested_keys),
+                                                                                    len(produced_keys),
+                                                                                    len(work_filenames)))
 
     output_filenames = []
     for pdb_filename in work_filenames:
@@ -402,9 +406,6 @@ def map_all_pssms(pkl_dataset, pruned_dataset, blastdb, output_dir, num_cpus, so
             os.makedirs(sub_dir, exist_ok=True)
         output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + ".pkl")
 
-    logging.info("{:} requested keys, {:} produced keys, {:} work keys"
-                 .format(len(requested_keys), len(produced_keys),
-                         len(work_keys)))
     inputs = [(key, blastdb, output)
               for key, output in zip(work_filenames, output_filenames)]
     par.submit_jobs(map_pssms, inputs, num_cpus)
@@ -439,11 +440,13 @@ def map_all_profile_hmms(pkl_dataset, pruned_dataset, output_dir, hhsuite_db, nu
             work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3].upper(), work_key + ext)
                               for work_key in work_keys]
 
-        logging.info("{:} requested keys, {:} produced keys, {:} work keys".format(len(requested_keys),
-                                                                                   len(produced_keys), len(work_keys)))
+        # Remove any duplicate filenames
+        work_filenames = list(set(work_filenames))
+        logging.info("{:} requested keys, {:} produced keys, {:} work filenames".format(len(requested_keys),
+                                                                                        len(produced_keys),
+                                                                                        len(work_filenames)))
 
         # Write out a local file containing all work filenames
-        work_filenames = list(set(work_filenames))  # Remove any duplicate filenames
         temp_df = pd.DataFrame({'filename': work_filenames})
         temp_df.to_csv(f'{source_type}_work_filenames.csv')
         logging.info('File containing work filenames written to storage. Exiting...')
@@ -457,14 +460,14 @@ def map_all_profile_hmms(pkl_dataset, pruned_dataset, output_dir, hhsuite_db, nu
         work_filename_rank_batches = slice_list(work_filenames, size)
         work_filenames = work_filename_rank_batches[rank]
 
+        logging.info("{:} work filenames".format(len(work_filenames)))
+
         output_filenames = []
         for pdb_filename in work_filenames:
             sub_dir = output_dir + '/' + db.get_pdb_code(pdb_filename)[1:3]
             if not os.path.exists(sub_dir):
                 os.makedirs(sub_dir, exist_ok=True)
             output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + '.pkl')
-
-        logging.info("{:} work filenames".format(len(work_filenames)))
 
         inputs = [(num_cpus_per_job, key, output, hhsuite_db, source_type, num_iter)
                   for key, output in zip(work_filenames, output_filenames)]
