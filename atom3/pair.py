@@ -18,7 +18,7 @@ Pair = col.namedtuple(
     'Pair', ['complex', 'df0', 'df1', 'pos_idx', 'neg_idx', 'srcs', 'id', 'sequences'])
 
 PairWithLabels = col.namedtuple(
-    'Pair', ['complex', 'df0', 'df1', 'pos_idx', 'neg_idx', 'srcs', 'id', 'sequences', 'labels'])
+    'PairWithLabels', ['complex', 'df0', 'df1', 'pos_idx', 'neg_idx', 'srcs', 'id', 'sequences', 'labels'])
 
 sem = mp.Semaphore()
 
