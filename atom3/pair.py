@@ -17,6 +17,9 @@ from atom3.structure import get_ca_pos_from_residues, get_ca_pos_from_atoms
 Pair = col.namedtuple(
     'Pair', ['complex', 'df0', 'df1', 'pos_idx', 'neg_idx', 'srcs', 'id', 'sequences'])
 
+PairWithLabels = col.namedtuple(
+    'Pair', ['complex', 'df0', 'df1', 'pos_idx', 'neg_idx', 'srcs', 'id', 'sequences', 'labels'])
+
 sem = mp.Semaphore()
 
 
