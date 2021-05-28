@@ -20,10 +20,12 @@ def extract_hmm_profile(hhm_file, sequence, asterisks_replace=0.0):
         if len(line_values) == 23:
             # The first and the last values in line_values are metadata, so skip them.
             for j, t in enumerate(line_values[2:-1]):
+                # These twenty aa_profile values represent emission probabilities
                 aa_profile[count_aa, j] = (2 ** (-float(t) / 1000.) if t != '*' else asterisks_replace)
             count_aa += 1
         elif len(line_values) == 10:
             for j, t in enumerate(line_values):
+                # These ten gap_profile values represent transition probabilities (first seven) and alignment diversity (last three)
                 gap_profile[count_gap, j] = (2 ** (-float(t) / 1000.) if t != '*' else asterisks_replace)
             count_gap += 1
         elif not line_values:
