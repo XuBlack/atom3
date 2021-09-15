@@ -115,7 +115,7 @@ def parse_structure(structure_filename, concoord=False, one_model=False):
         df = pd.DataFrame([(
             pdb_name,
             str(atom.get_parent().get_parent().get_parent().serial_num),
-            atom.get_parent().get_full_id()[2],
+            pdb_name[4].upper() if atom.get_parent().get_full_id()[2] == ' ' else atom.get_parent().get_full_id()[2],
             str(atom.get_parent().get_id()[1]) + atom.get_parent().get_id()[2],
             atom.get_parent().get_resname(),
             atom.get_coord()[0],
