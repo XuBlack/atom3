@@ -327,10 +327,11 @@ def map_all_protrusion_indices(psaia_config_file, pdb_dataset, pkl_dataset, prun
     # Filter DB5 filenames to unbound type and get all work filenames
     requested_filenames = [filename for filename in requested_filenames
                            if (source_type.lower() == 'db5' and '_u_' in filename)
-                           or (source_type.lower() == 'rcsb')]
+                           or (source_type.lower() == 'rcsb')
+                           or (source_type.lower() == 'evcoupling')]
     requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
     requested_pdb_codes = [db.get_pdb_code(x) for x in requested_filenames]
-    produced_filenames_path = os.path.join(output_dir, 'PSAIA', 'RCSB' if source_type.lower() == 'rcsb' else 'DB5')
+    produced_filenames_path = os.path.join(output_dir, 'PSAIA', source_type.upper())
     produced_filenames = [path.as_posix() for path in Path(produced_filenames_path).rglob('*.tbl')]
     produced_keys = [db.get_pdb_code(x) for x in produced_filenames]
     work_keys = [key for key, pdb_code in zip(requested_keys, requested_pdb_codes) if pdb_code not in produced_keys]

@@ -151,6 +151,9 @@ def get_pairs(neighbor_def, complex, type, unbound, nb_fn, full):
     elif type == 'dockground':
         pairs, num_subunits = \
             _get_db5_pairs(complex, unbound, nb_fn, full)
+    elif type == 'evcoupling':
+        pairs, num_subunits = \
+            _get_evcoupling_pairs(complex, unbound, nb_fn, full)
     else:
         raise RuntimeError("Unrecognized dataset type {:}".format(type))
     return pairs, num_subunits
@@ -222,6 +225,29 @@ def _get_db5_pairs(complex, unbound, nb_fn, full):
     else:
         ldf, rdf = lb_df, rb_df
         lsrc, rsrc = lb, rb
+    lpos = get_ca_pos_from_residues(ldf, lres)
+    rpos = get_ca_pos_from_residues(rdf, rres)
+    pos_idx, neg_idx = _get_residue_positions(ldf, lpos, rdf, rpos, full)
+    srcs = {'src0': lsrc, 'src1': rsrc}
+    pair = Pair(complex=complex.name, df0=ldf, df1=rdf, pos_idx=pos_idx, neg_idx=neg_idx, srcs=srcs, id=0, sequences={})
+    return [pair], 2
+
+
+def _get_evcoupling_pairs(complex, unbound, nb_fn, full):
+    """
+    Get pairs for docking benchmark 5 type complex.
+    For this type of complex, we assume that each file is its own entity,
+    and that there is essentially one pair for each complex, with one side
+    being all the chains of the ligand, and the other all the chains of the
+    receptor.
+    """
+    (lb, rb) = complex.bound_filenames
+    lb_df = pd.read_pickle(lb)
+    rb_df = pd.read_pickle(rb)
+    # Always use bound to get neighbors...
+    lres, rres = nb_fn(lb_df, rb_df)
+    ldf, rdf = lb_df, rb_df
+    lsrc, rsrc = lb, rb
     lpos = get_ca_pos_from_residues(ldf, lres)
     rpos = get_ca_pos_from_residues(rdf, rres)
     pos_idx, neg_idx = _get_residue_positions(ldf, lpos, rdf, rpos, full)

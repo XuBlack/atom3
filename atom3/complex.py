@@ -60,6 +60,8 @@ def get_complexes(filenames, type):
     elif type == 'dockground':
         raw_complexes = _get_db5_complexes(
             filenames, keyer=db.get_pdb_basename)
+    elif type == 'evcoupling':
+        raw_complexes = _get_evcoupling_complexes(filenames)
     else:
         raise RuntimeError("Unrecognized dataset type {:}".format(type))
     complexes = {
@@ -96,13 +98,13 @@ def _get_rcsb_complexes(filenames):
 
 
 def _get_db5_complexes_mut(filenames):
-    filenames = [f for f in filenames if 'mut' in f] #screen the original non mutant
+    filenames = [f for f in filenames if 'mut' in f]  # screen the original non mutant
     basenames = [os.path.basename(f) for f in filenames]
     new_pdbs = [b[:4] + '_' + b[b.rfind('_') + 1: b.find('.')] for b in basenames]
     complexes = {}
     for pdb in new_pdbs:
         code4 = pdb[:4]
-        mutnum = 'mut_' + pdb[pdb.find('_') + 1: ] + '.'
+        mutnum = 'mut_' + pdb[pdb.find('_') + 1:] + '.'
         lb = [x for x in filenames if code4 in x and mutnum in x and '_l_b_' in x][0]
         rb = [x for x in filenames if code4 in x and mutnum in x and '_r_b_' in x][0]
         lu = [x for x in filenames if code4 in x and mutnum in x and '_l_u_' in x][0]
@@ -129,7 +131,8 @@ def _get_db5_complexes_hotspot_mut(filenames):
         if '_l_' in file_pairs[pdb][0]:
             complexes[pdb] = Complex(name=pdb, bound_filenames=file_pairs[pdb], unbound_filenames=[None, None])
         else:
-            complexes[pdb] = Complex(name=pdb, bound_filenames=[file_pairs[pdb][1], file_pairs[pdb][0]], unbound_filenames=[None, None])
+            complexes[pdb] = Complex(name=pdb, bound_filenames=[file_pairs[pdb][1], file_pairs[pdb][0]],
+                                     unbound_filenames=[None, None])
     return complexes
 
 
@@ -153,16 +156,36 @@ def _get_db5_complexes(filenames, keyer=db.get_pdb_code):
         if lu is None or ru is None:
             logging.warning(
                 "Skipping {:} since not all unbound files present."
-                .format(pdb_code))
+                    .format(pdb_code))
             continue
         if keyer(lu) != keyer(lb) or keyer(lu) != keyer(rb) or \
                 keyer(lu) != keyer(ru):
             logging.warning(
                 "Skipping {:} since not all keys match."
-                .format(pdb_code))
+                    .format(pdb_code))
             continue
 
         complexes[keyer(lu)] = Complex(
             name=keyer(lu), bound_filenames=[lb, rb],
             unbound_filenames=[lu, ru])
+    return complexes
+
+
+def _get_evcoupling_complexes(filenames, keyer=db.get_pdb_code):
+    """Get complexes for EVCoupling type dataset."""
+    pdb_codes = ca.get_complex_pdb_codes(filenames)
+    complexes = {}
+    for pdb_code in pdb_codes:
+        lb = ca.find_of_type(
+            pdb_code, filenames, receptor=False, bound=True, style='evcoupling')
+        rb = ca.find_of_type(
+            pdb_code, filenames, receptor=True, bound=True, style='evcoupling')
+        if lb is None or rb is None:
+            logging.warning("Skipping {:} since not all bound files present."
+                            .format(pdb_code))
+            continue
+
+        complexes[keyer(lb)] = Complex(
+            name=keyer(lb), bound_filenames=[lb, rb],
+            unbound_filenames=[])
     return complexes

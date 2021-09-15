@@ -36,7 +36,7 @@ def add_clean_parser(subparsers, pp):
         default='db5', help='style of dataset (default: db5)')
     cp.add_argument('-c', metavar='cpus', default=mp.cpu_count(), type=int,
                     help='number of cpus to use for processing (default:'
-                    ' number processors available on current machine)')
+                         ' number processors available on current machine)')
 
 
 def generate_all_clean_complexes(args):
@@ -230,7 +230,7 @@ def get_pdb_code_with_partner_and_binding(pdb_filename):
     e.g. 11as_r_u.pdb would give 11as_r_u
     """
     return db.get_pdb_code(pdb_filename) + '_' + _get_partner(pdb_filename) + \
-        '_' + _get_binding(pdb_filename)
+           '_' + _get_binding(pdb_filename)
 
 
 def get_pdb_code_with_binding(pdb_filename):
@@ -304,9 +304,9 @@ def _get_alignments(seq_u, atom_u, seq_b, atom_b):
             curr.split(',')
         start_b, end_b = int(start_b), int(end_b)
         start_u, end_u = int(start_u), int(end_u)
-#        logging.info('Alignment {:} (score {:}) from {:} to {:} on bound, '
-#                     '{:} to {:} on unbound.'.format(
-#                         i, evalue, start_b, end_b, start_u, end_u))
+        #        logging.info('Alignment {:} (score {:}) from {:} to {:} on bound, '
+        #                     '{:} to {:} on unbound.'.format(
+        #                         i, evalue, start_b, end_b, start_u, end_u))
         idx_b, idx_u = start_b - 1, start_u - 1
         assert len(align_u) == len(align_b)
         align_size = len(align_u)
@@ -494,9 +494,9 @@ def _get_chain_mapping(unbound, bound, style):
 
     for unmatched_u in [cu for cu in chains_u if cu not in u2b_chain]:
         logging.warning("{:} chain {:} has no match found!"
-                        .format(
-                            get_pdb_code_with_partner_and_binding(unbound),
-                            unmatched_u))
+            .format(
+            get_pdb_code_with_partner_and_binding(unbound),
+            unmatched_u))
         u2r_chain[unmatched_u] = reference_chain
         reference_chain = chr(ord(reference_chain) + 1)
     for unmatched_b in [cb for cb in chains_b if cb not in b2u_chain]:
@@ -504,9 +504,9 @@ def _get_chain_mapping(unbound, bound, style):
             # We don't care about unmatched bound in dockground.
             continue
         logging.warning("{:} chain {:} has no match found!"
-                        .format(
-                            get_pdb_code_with_partner_and_binding(bound),
-                            unmatched_b))
+            .format(
+            get_pdb_code_with_partner_and_binding(bound),
+            unmatched_b))
         b2r_chain[unmatched_b] = reference_chain
         reference_chain = chr(ord(reference_chain) + 1)
 
@@ -528,9 +528,9 @@ def _generate_clean_unbound_bound(filename_u, filename_b, results_dir, style):
         pdb_extension = db.get_pdb_type(filename_b)
 
     output_filename_u = results_dir + '/' + aug_pdb_code_u + '_cleaned.' + \
-        pdb_extension
+                        pdb_extension
     output_filename_b = results_dir + '/' + aug_pdb_code_b + '_cleaned.' + \
-        pdb_extension
+                        pdb_extension
     _generate_reference(
         filename_b, b2r_chain, b2r_res, output_filename_b, style)
     _generate_reference(
@@ -602,7 +602,7 @@ def _generate_clean_complex(pdb_code, containing_dir, results_dir, style):
     if not os.path.exists(results_dir):
         os.makedirs(results_dir, exist_ok=True)
 
-#    logging.info("Receptor")
+    #    logging.info("Receptor")
     _generate_clean_unbound_bound(ru, rb, results_dir, style)
-#    logging.info("Ligand")
+    #    logging.info("Ligand")
     _generate_clean_unbound_bound(lu, lb, results_dir, style)
