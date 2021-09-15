@@ -378,7 +378,8 @@ def map_all_pssms(pkl_dataset, pruned_dataset, blastdb, output_dir, num_cpus, so
     # Filter DB5 filenames to unbound type and get all work filenames
     requested_filenames = [filename for filename in requested_filenames
                            if (source_type.lower() == 'db5' and '_u_' in filename)
-                           or (source_type.lower() == 'rcsb')]
+                           or (source_type.lower() == 'rcsb')
+                           or (source_type.lower() == 'evcoupling')]
     requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
     produced_filenames = db.get_structures_filenames(output_dir, extension='.pkl')
     produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
@@ -429,7 +430,8 @@ def map_all_profile_hmms(pkl_dataset, pruned_dataset, output_dir, hhsuite_db, nu
         # Filter DB5 filenames to unbound type and get all work filenames
         requested_filenames = [filename for filename in requested_filenames
                                if (source_type.lower() == 'db5' and '_u_' in filename)
-                               or (source_type.lower() == 'rcsb')]
+                               or (source_type.lower() == 'rcsb')
+                               or (source_type.lower() == 'evcoupling')]
         requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
         produced_filenames = db.get_structures_filenames(output_dir, extension='.pkl')
         produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
