@@ -6,11 +6,10 @@ import subprocess
 import timeit
 from pathlib import Path
 
-import pandas as pd
-import parallel as par
-
 import atom3.database as db
 import atom3.sequence as sequ
+import pandas as pd
+import parallel as par
 from atom3.utils import extract_hmm_profile, slice_list
 
 
@@ -314,7 +313,7 @@ def _al2co(clustal_in, al2co_out):
 
 def map_all_protrusion_indices(psaia_config_file, pdb_dataset, pkl_dataset, pruned_dataset, output_dir, source_type):
     ext = '.pkl'
-    if source_type.lower() == 'rcsb' or source_type.lower() == 'casp_capri':
+    if source_type.lower() == 'rcsb':
         # Filter out pairs that did not survive pruning previously to reduce complexity
         pruned_pdb_names = [db.get_pdb_name(filename)
                             for filename in db.get_structures_filenames(pruned_dataset, extension='.dill')]
@@ -381,12 +380,13 @@ def map_all_pssms(pkl_dataset, pruned_dataset, blastdb, output_dir, num_cpus, so
     requested_filenames = [filename for filename in requested_filenames
                            if (source_type.lower() == 'db5' and '_u_' in filename)
                            or (source_type.lower() == 'rcsb')
-                           or (source_type.lower() == 'evcoupling')]
+                           or (source_type.lower() == 'evcoupling')
+                           or (source_type.lower() == 'casp_capri')]
     requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
     produced_filenames = db.get_structures_filenames(output_dir, extension='.pkl')
     produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
     work_keys = [key for key in requested_keys if key not in produced_keys]
-    if source_type.lower() == 'rcsb':
+    if source_type.lower() == 'rcsb' or source_type.lower() == 'casp_capri':
         work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3], work_key + ext)
                           for work_key in work_keys]
     else:
@@ -419,7 +419,7 @@ def map_all_profile_hmms(pkl_dataset, pruned_dataset, output_dir, hhsuite_db, nu
                          num_cpus_per_job, source_type, num_iter, rank, size, write_file):
     ext = '.pkl'
     if write_file:
-        if source_type.lower() == 'rcsb' or source_type.lower() == 'casp_capri':
+        if source_type.lower() == 'rcsb':
             # Filter out pairs that did not survive pruning previously to reduce complexity
             pruned_pdb_names = [db.get_pdb_name(filename)
                                 for filename in db.get_structures_filenames(pruned_dataset, extension='.dill')]
