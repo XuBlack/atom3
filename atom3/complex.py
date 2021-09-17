@@ -62,6 +62,8 @@ def get_complexes(filenames, type):
             filenames, keyer=db.get_pdb_basename)
     elif type == 'evcoupling':
         raw_complexes = _get_evcoupling_complexes(filenames)
+    elif type == 'casp_capri':
+        raw_complexes = _get_casp_capri_complexes(filenames)
     else:
         raise RuntimeError("Unrecognized dataset type {:}".format(type))
     complexes = {
@@ -188,4 +190,14 @@ def _get_evcoupling_complexes(filenames, keyer=db.get_pdb_code):
         complexes[keyer(lb)] = Complex(
             name=keyer(lb), bound_filenames=[lb, rb],
             unbound_filenames=[])
+    return complexes
+
+
+def _get_casp_capri_complexes(filenames, keyer=db.get_pdb_code):
+    """Get complexes for CASP-CAPRI type dataset."""
+    complexes = {}
+    for filename in filenames:
+        name = db.get_pdb_name(filename)
+        complexes[name] = Complex(name=name, bound_filenames=[filename],
+                                  unbound_filenames=[])
     return complexes

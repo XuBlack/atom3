@@ -3,15 +3,14 @@ import logging
 import multiprocessing as mp
 import os
 
-import dill
-import numpy as np
-import pandas as pd
-import parallel as par
-
 import atom3.case as ca
 import atom3.complex as comp
 import atom3.database as db
 import atom3.neighbors as nb
+import dill
+import numpy as np
+import pandas as pd
+import parallel as par
 from atom3.structure import get_ca_pos_from_residues, get_ca_pos_from_atoms
 
 Pair = col.namedtuple(
@@ -65,7 +64,7 @@ def all_complexes_to_pairs_full(args):
     all_complex_to_pairs(complexes, get_pairs, args.output_dir, args.c)
 
 
-def all_complex_to_pairs(complexes, get_pairs, output_dir, num_cpus):
+def all_complex_to_pairs(complexes, source_type, get_pairs, output_dir, num_cpus):
     """Reads in structures and produces appropriate pairings."""
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
@@ -74,7 +73,7 @@ def all_complex_to_pairs(complexes, get_pairs, output_dir, num_cpus):
     produced_keys = complexes_from_pair_dir(output_dir)
     work_keys = [key for key in requested_keys if key not in produced_keys]
 
-    inputs = [(complexes['data'][key], get_pairs, output_dir)
+    inputs = [(complexes['data'][key], source_type, get_pairs, output_dir)
               for key in work_keys]
     logging.info("{:} requested keys, {:} produced keys, {:} work keys"
                  .format(len(requested_keys), len(produced_keys),
@@ -91,13 +90,15 @@ def complexes_from_pair_dir(pair_dir):
     return ['_'.join(db.get_pdb_name(x).split('_')[:-1]) for x in filenames]
 
 
-def complex_to_pairs(complex, get_pairs, output_dir):
+def complex_to_pairs(complex, source_type, get_pairs, output_dir):
     pairs_txt = output_dir + '/pairs.txt'
     name = complex.name
     logging.info("Working on {:}".format(name))
     pairs, num_subunits = get_pairs(complex)
-    logging.info("For complex {:} found {:} pairs out of {:} chains"
-                 .format(name, len(pairs), num_subunits))
+    casp_capri_addon_message = '; selecting pair with most inter-chain interactions'
+    logging_message = "For complex {:} found {:} pairs out of {:} chains"
+    logging_message += casp_capri_addon_message if source_type == 'casp_capri' and num_subunits > 1 else ''
+    logging.info(logging_message.format(name, len(pairs), num_subunits))
     sub_dir = output_dir + '/' + db.get_pdb_code(name)[1:3]
     f = name
     if ('mut' in f) and ('mut' not in db.get_pdb_code(name)):
@@ -110,6 +111,13 @@ def complex_to_pairs(complex, get_pairs, output_dir):
             with open(pairs_txt, 'a') as f:
                 f.write(name + '\n')
 
+    if source_type == 'casp_capri':
+        pair_with_most_interactions = pairs[0]
+        for pair in pairs:
+            if len(pair.pos_idx) > len(pair_with_most_interactions.pos_idx):
+                pair_with_most_interactions = pair
+        pairs = [pair_with_most_interactions]
+        assert len(pairs) == 1, 'For CASP-CAPRI complexes, the max-interactions chain must be the only chain selected'
     for i, pair in enumerate(pairs):
         output_dill = "{:}/{:}_{:}.dill".format(sub_dir, name, i)
         write_pair_as_dill(pair, output_dill)
@@ -154,6 +162,9 @@ def get_pairs(neighbor_def, complex, type, unbound, nb_fn, full):
     elif type == 'evcoupling':
         pairs, num_subunits = \
             _get_evcoupling_pairs(complex, unbound, nb_fn, full)
+    elif type == 'casp_capri':
+        pairs, num_subunits = \
+            _get_casp_capri_pairs(neighbor_def, complex, unbound, nb_fn, full)
     else:
         raise RuntimeError("Unrecognized dataset type {:}".format(type))
     return pairs, num_subunits
@@ -184,6 +195,7 @@ def _get_rcsb_pairs(neighbor_def, complex, unbound, nb_fn, full):
 def _get_db5_pairs(complex, unbound, nb_fn, full):
     """
     Get pairs for docking benchmark 5 type complex.
+
     For this type of complex, we assume that each file is its own entity,
     and that there is essentially one pair for each complex, with one side
     being all the chains of the ligand, and the other all the chains of the
@@ -235,11 +247,11 @@ def _get_db5_pairs(complex, unbound, nb_fn, full):
 
 def _get_evcoupling_pairs(complex, unbound, nb_fn, full):
     """
-    Get pairs for docking benchmark 5 type complex.
-    For this type of complex, we assume that each file is its own entity,
-    and that there is essentially one pair for each complex, with one side
-    being all the chains of the ligand, and the other all the chains of the
-    receptor.
+    Get pairs for EVCoupling type complex.
+
+    For this type of complex, we assume that each chain is its own entity,
+    and that two chains form a pair if at least one pair of residues spanning
+    the two are considered neighbors.
     """
     (lb, rb) = complex.bound_filenames
     lb_df = pd.read_pickle(lb)
@@ -254,6 +266,28 @@ def _get_evcoupling_pairs(complex, unbound, nb_fn, full):
     srcs = {'src0': lsrc, 'src1': rsrc}
     pair = Pair(complex=complex.name, df0=ldf, df1=rdf, pos_idx=pos_idx, neg_idx=neg_idx, srcs=srcs, id=0, sequences={})
     return [pair], 2
+
+
+def _get_casp_capri_pairs(neighbor_def, complex, unbound, nb_fn, full):
+    """
+    Get pairs for CASP-CAPRI type complex.
+
+    For this type of complex, we assume that each chain is its own entity,
+    and that two chains form a pair if at least one pair of residues spanning
+    the two are considered neighbors.
+    """
+    if unbound:
+        logging.error("Requested unbound pairs from RCSB type complex, "
+                      "even though they don't have unbound data.")
+        raise RuntimeError("Unbound requested for RCSB")
+    (pkl_filename,) = complex.bound_filenames
+    df = pd.read_pickle(pkl_filename)
+    # TODO: Allow for keeping more than just first model.
+    if df.shape[0] == 0:
+        return [], 0
+    df = df[df['model'] == df['model'][0]]
+    pairs, num_chains = _get_all_chain_pairs(neighbor_def, complex, df, nb_fn, pkl_filename, full)
+    return pairs, num_chains
 
 
 def _get_all_chain_pairs(neighbor_def, complex, df, nb_fn, filename, full):
