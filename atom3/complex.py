@@ -64,6 +64,8 @@ def get_complexes(filenames, type):
         raw_complexes = _get_evcoupling_complexes(filenames)
     elif type == 'casp_capri':
         raw_complexes = _get_casp_capri_complexes(filenames)
+    elif type == 'input':
+        raw_complexes = _get_input_complexes(filenames)
     else:
         raise RuntimeError("Unrecognized dataset type {:}".format(type))
     complexes = {
@@ -200,4 +202,25 @@ def _get_casp_capri_complexes(filenames, keyer=db.get_pdb_code):
         name = db.get_pdb_name(filename)
         complexes[name] = Complex(name=name, bound_filenames=[filename],
                                   unbound_filenames=[])
+    return complexes
+
+
+def _get_input_complexes(filenames, keyer=db.get_pdb_code):
+    """Get complexes for input type dataset."""
+    pdb_codes = ca.get_complex_pdb_codes(filenames)
+    complexes = {}
+    for pdb_code in pdb_codes:
+        lu = ca.find_of_type(
+            pdb_code, filenames, receptor=False, bound=False, style='db5')
+        ru = ca.find_of_type(
+            pdb_code, filenames, receptor=True, bound=False, style='db5')
+        if lu is None or ru is None:
+            logging.warning(
+                "Skipping {:} since not all unbound files present."
+                    .format(pdb_code))
+            continue
+
+        complexes[keyer(lu)] = Complex(
+            name=keyer(lu), bound_filenames=[],
+            unbound_filenames=[lu, ru])
     return complexes

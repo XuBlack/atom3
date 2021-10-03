@@ -38,10 +38,10 @@ def add_conservation_parser(subparsers, pp):
                     help='whether the source PDBs are for bound or unbound complexes (i.e. RCSB (e.g. DIPS) or DB5 complexes)')
 
 
-def gen_protrusion_index(psaia_config_file, file_list_file):
+def gen_protrusion_index(psaia_dir, psaia_config_file, file_list_file):
     """Generate protrusion index for file list of PDB structures."""
     logging.info("PSAIA'ing {:}".format(file_list_file))
-    _psaia(psaia_config_file, file_list_file)
+    _psaia(psaia_dir, psaia_config_file, file_list_file)
 
 
 def gen_pssm(pdb_filename, blastdb, output_filename):
@@ -187,10 +187,10 @@ def gen_profile_hmm(num_cpus, pkl_filename, output_filename, hhsuite_db, source_
     return profile_hmms, num_chains
 
 
-def map_protrusion_indices(psaia_config_file, file_list_file):
+def map_protrusion_indices(psaia_dir, psaia_config_file, file_list_file):
     start_time = timeit.default_timer()
     start_time_psaiaing = timeit.default_timer()
-    gen_protrusion_index(psaia_config_file, file_list_file)
+    gen_protrusion_index(psaia_dir, psaia_config_file, file_list_file)
     elapsed_psaiaing = timeit.default_timer() - start_time_psaiaing
 
     start_time_writing = timeit.default_timer()
@@ -240,17 +240,23 @@ def map_profile_hmms(num_cpus, pkl_filename, output_filename, hhsuite_db, source
                                                                      elapsed_writing, elapsed))
 
 
-def _psaia(psaia_config_file, file_list_file):
+def _psaia(psaia_dir, psaia_config_file, file_list_file):
     """Run PSAIA on specified input."""
-    psaia_command = "yes y | psa {:} {:}"  # PSA is the CLI for PSAIA (the GUI)
+    psa_path = os.path.join(psaia_dir, 'psa')
+    psaia_command = f"yes y | {psa_path} {psaia_config_file} {file_list_file}"  # PSA is the PSAIA's CLI (i.e., its GUI)
     log_out = "{}.out".format(file_list_file)
     log_err = "{}.err".format(file_list_file)
     with open(log_out, 'a') as f_out:
         with open(log_err, 'a') as f_err:
-            command = psaia_command.format(psaia_config_file, file_list_file)
             f_out.write('=================== CALL ===================\n')
-            f_out.write(command + '\n')
-            subprocess.check_call(command, shell=True, stderr=f_err, stdout=f_out)
+            f_out.write(psaia_command + '\n')
+            try:
+                subprocess.check_call(psaia_command, shell=True, stderr=f_err, stdout=f_out)
+            except subprocess.CalledProcessError as cpe:
+                if cpe.returncode == 1:  # A return code of 1 indicates that PSA was successful
+                    pass
+                else:
+                    raise cpe
             f_out.write('================= END CALL =================\n')
 
 
@@ -311,7 +317,13 @@ def _al2co(clustal_in, al2co_out):
             f_out.write('================= END CALL =================\n')
 
 
-def map_all_protrusion_indices(psaia_config_file, pdb_dataset, pkl_dataset, pruned_dataset, output_dir, source_type):
+def format_pdb_code_for_inputs(pdb_code: str, source_type: str):
+    """Format given PDB code for prediction inputs."""
+    return pdb_code if source_type.lower() == 'input' else pdb_code.upper()
+
+
+def map_all_protrusion_indices(psaia_dir, psaia_config_file, pdb_dataset, pkl_dataset,
+                               pruned_dataset, output_dir, source_type):
     ext = '.pkl'
     if source_type.lower() == 'rcsb':
         # Filter out pairs that did not survive pruning previously to reduce complexity
@@ -327,9 +339,7 @@ def map_all_protrusion_indices(psaia_config_file, pdb_dataset, pkl_dataset, prun
     # Filter DB5 filenames to unbound type and get all work filenames
     requested_filenames = [filename for filename in requested_filenames
                            if (source_type.lower() == 'db5' and '_u_' in filename)
-                           or (source_type.lower() == 'rcsb')
-                           or (source_type.lower() == 'evcoupling')
-                           or (source_type.lower() == 'casp_capri')]
+                           or (source_type.lower() in ['rcsb', 'evcoupling', 'casp_capri', 'input'])]
     requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
     requested_pdb_codes = [db.get_pdb_code(x) for x in requested_filenames]
     produced_filenames_path = os.path.join(output_dir, 'PSAIA', source_type.upper())
@@ -340,8 +350,9 @@ def map_all_protrusion_indices(psaia_config_file, pdb_dataset, pkl_dataset, prun
         work_filenames = [os.path.join(pdb_dataset, db.get_pdb_code(work_key)[1:3], work_key)
                           for work_key in work_keys]
     else:
-        work_filenames = [os.path.join(pdb_dataset, db.get_pdb_code(work_key).upper(), work_key)
-                          for work_key in work_keys]
+        work_filenames = [os.path.join(pdb_dataset,
+                                       format_pdb_code_for_inputs(db.get_pdb_code(work_key), source_type),
+                                       work_key) for work_key in work_keys]
 
     # Remove any duplicate filenames
     work_filenames = list(set(work_filenames))
@@ -360,7 +371,7 @@ def map_all_protrusion_indices(psaia_config_file, pdb_dataset, pkl_dataset, prun
         for requested_pdb_filename in work_filenames:
             file.write(f'{requested_pdb_filename}\n')
 
-    inputs = [(psaia_config_file, file_list_file)]
+    inputs = [(psaia_dir, psaia_config_file, file_list_file)]
     par.submit_jobs(map_protrusion_indices, inputs, 1)  # PSAIA is inherently single-threaded in execution
 
 
@@ -433,9 +444,7 @@ def map_all_profile_hmms(pkl_dataset, pruned_dataset, output_dir, hhsuite_db, nu
         # Filter DB5 filenames to unbound type and get all work filenames
         requested_filenames = [filename for filename in requested_filenames
                                if (source_type.lower() == 'db5' and '_u_' in filename)
-                               or (source_type.lower() == 'rcsb')
-                               or (source_type.lower() == 'evcoupling')
-                               or (source_type.lower() == 'casp_capri')]
+                               or (source_type.lower() in ['rcsb', 'evcoupling', 'casp_capri', 'input'])]
         requested_keys = [db.get_pdb_name(x) for x in requested_filenames]
         produced_filenames = db.get_structures_filenames(output_dir, extension='.pkl')
         produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
@@ -444,7 +453,9 @@ def map_all_profile_hmms(pkl_dataset, pruned_dataset, output_dir, hhsuite_db, nu
             work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3], work_key + ext)
                               for work_key in work_keys]
         else:
-            work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3].upper(), work_key + ext)
+            work_filenames = [os.path.join(pkl_dataset,
+                                           format_pdb_code_for_inputs(db.get_pdb_code(work_key)[1:3], source_type),
+                                           work_key + ext)
                               for work_key in work_keys]
 
         # Remove any duplicate filenames
@@ -453,10 +464,25 @@ def map_all_profile_hmms(pkl_dataset, pruned_dataset, output_dir, hhsuite_db, nu
                                                                                         len(produced_keys),
                                                                                         len(work_filenames)))
 
-        # Write out a local file containing all work filenames
-        temp_df = pd.DataFrame({'filename': work_filenames})
-        temp_df.to_csv(f'{source_type}_work_filenames.csv')
-        logging.info('File containing work filenames written to storage. Exiting...')
+        if source_type.lower() == 'input':
+            # Directly generate profile HMM features after aggregating input filenames
+            logging.info("{:} work filenames".format(len(work_filenames)))
+
+            output_filenames = []
+            for pdb_filename in work_filenames:
+                sub_dir = output_dir + '/' + db.get_pdb_code(pdb_filename)[1:3]
+                if not os.path.exists(sub_dir):
+                    os.makedirs(sub_dir, exist_ok=True)
+                output_filenames.append(sub_dir + '/' + db.get_pdb_name(pdb_filename) + '.pkl')
+
+            inputs = [(num_cpus_per_job, key, output, hhsuite_db, source_type, num_iter)
+                      for key, output in zip(work_filenames, output_filenames)]
+            par.submit_jobs(map_profile_hmms, inputs, num_cpu_jobs)
+        else:
+            # Write out a local file containing all work filenames
+            temp_df = pd.DataFrame({'filename': work_filenames})
+            temp_df.to_csv(f'{source_type}_work_filenames.csv')
+            logging.info('File containing work filenames written to storage. Exiting...')
 
     # Read from previously-created work filenames CSV
     else:

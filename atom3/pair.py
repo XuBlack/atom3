@@ -3,14 +3,15 @@ import logging
 import multiprocessing as mp
 import os
 
-import atom3.case as ca
-import atom3.complex as comp
-import atom3.database as db
-import atom3.neighbors as nb
 import dill
 import numpy as np
 import pandas as pd
 import parallel as par
+
+import atom3.case as ca
+import atom3.complex as comp
+import atom3.database as db
+import atom3.neighbors as nb
 from atom3.structure import get_ca_pos_from_residues, get_ca_pos_from_atoms
 
 Pair = col.namedtuple(
@@ -165,6 +166,9 @@ def get_pairs(neighbor_def, complex, type, unbound, nb_fn, full):
     elif type == 'casp_capri':
         pairs, num_subunits = \
             _get_casp_capri_pairs(neighbor_def, complex, unbound, nb_fn, full)
+    elif type == 'input':
+        pairs, num_subunits = \
+            _get_input_pairs(complex, full)
     else:
         raise RuntimeError("Unrecognized dataset type {:}".format(type))
     return pairs, num_subunits
@@ -288,6 +292,24 @@ def _get_casp_capri_pairs(neighbor_def, complex, unbound, nb_fn, full):
     df = df[df['model'] == df['model'][0]]
     pairs, num_chains = _get_all_chain_pairs(neighbor_def, complex, df, nb_fn, pkl_filename, full)
     return pairs, num_chains
+
+
+def _get_input_pairs(complex):
+    """
+    Get pairs for input type complex.
+
+    For this type of complex, we assume that each file is its own entity,
+    and that there is essentially one pair for each complex, with one side
+    being all the chains of the ligand, and the other all the chains of the
+    receptor.
+    """
+    (lu, ru) = complex.unbound_filenames
+    ldf, rdf = pd.read_pickle(lu), pd.read_pickle(ru)
+    lsrc, rsrc = lu, ru
+    srcs = {'src0': lsrc, 'src1': rsrc}
+    pos_idx, neg_idx = np.array([]), np.array([])
+    pair = Pair(complex=complex.name, df0=ldf, df1=rdf, pos_idx=pos_idx, neg_idx=neg_idx, srcs=srcs, id=0, sequences={})
+    return [pair], 2
 
 
 def _get_all_chain_pairs(neighbor_def, complex, df, nb_fn, filename, full):
