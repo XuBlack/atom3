@@ -168,7 +168,7 @@ def get_pairs(neighbor_def, complex, type, unbound, nb_fn, full):
             _get_casp_capri_pairs(neighbor_def, complex, unbound, nb_fn, full)
     elif type == 'input':
         pairs, num_subunits = \
-            _get_input_pairs(complex, full)
+            _get_input_pairs(complex)
     else:
         raise RuntimeError("Unrecognized dataset type {:}".format(type))
     return pairs, num_subunits

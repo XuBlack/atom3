@@ -358,12 +358,7 @@ def map_all_protrusion_indices(psaia_dir, psaia_config_file, pdb_dataset, pkl_da
     work_filenames = list(set(work_filenames))
 
     # Exit early if no inputs need to processed
-    num_inputs = len(work_filenames)
-    if num_inputs == 0:
-        logging.info("Exiting early since all provided PDB files have already been processed by PSAIA")
-        exit(0)
-
-    logging.info("{:} PDB files to process with PSAIA".format(num_inputs))
+    logging.info("{:} PDB files to process with PSAIA".format(len(work_filenames)))
 
     # Create comprehensive filename list for PSAIA to single-threadedly process for requested features (e.g. protrusion)
     file_list_file = os.path.join(output_dir, 'PSAIA', source_type.upper(), 'pdb_list.fls')
