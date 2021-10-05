@@ -319,7 +319,7 @@ def _al2co(clustal_in, al2co_out):
 
 def format_pdb_code_for_inputs(pdb_code: str, source_type: str):
     """Format given PDB code for prediction inputs."""
-    return pdb_code if source_type.lower() == 'input' else pdb_code.upper()
+    return pdb_code[1:3] if source_type.lower() == 'input' else pdb_code.upper()
 
 
 def map_all_protrusion_indices(psaia_dir, psaia_config_file, pdb_dataset, pkl_dataset,
