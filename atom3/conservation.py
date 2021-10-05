@@ -449,7 +449,7 @@ def map_all_profile_hmms(pkl_dataset, pruned_dataset, output_dir, hhsuite_db, nu
                               for work_key in work_keys]
         else:
             work_filenames = [os.path.join(pkl_dataset,
-                                           format_pdb_code_for_inputs(db.get_pdb_code(work_key)[1:3], source_type),
+                                           format_pdb_code_for_inputs(db.get_pdb_code(work_key), source_type),
                                            work_key + ext)
                               for work_key in work_keys]
 
