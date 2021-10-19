@@ -444,14 +444,8 @@ def map_all_profile_hmms(pkl_dataset, pruned_dataset, output_dir, hhsuite_db, nu
         produced_filenames = db.get_structures_filenames(output_dir, extension='.pkl')
         produced_keys = [db.get_pdb_name(x) for x in produced_filenames]
         work_keys = [key for key in requested_keys if key not in produced_keys]
-        if source_type.lower() == 'rcsb' or source_type.lower() == 'casp_capri':
-            work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3], work_key + ext)
-                              for work_key in work_keys]
-        else:
-            work_filenames = [os.path.join(pkl_dataset,
-                                           format_pdb_code_for_inputs(db.get_pdb_code(work_key), source_type),
-                                           work_key + ext)
-                              for work_key in work_keys]
+        work_filenames = [os.path.join(pkl_dataset, db.get_pdb_code(work_key)[1:3], work_key + ext)
+                            for work_key in work_keys]
 
         # Remove any duplicate filenames
         work_filenames = list(set(work_filenames))
